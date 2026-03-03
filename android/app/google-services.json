@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "955930209044",
+    "project_id": "makerfriend-a3cc3",
+    "storage_bucket": "makerfriend-a3cc3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:955930209044:android:c58f92f17138957df3b001",
+        "android_client_info": {
+          "package_name": "com.cesardotomatic.makerfriend"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "955930209044-igg9enege382obvurhjdq1q9o5bft8tv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.cesardotomatic.makerfriend",
+            "certificate_hash": "1b3aed343e388d9721c6f9051dcc66dbedc53f09"
+          }
+        },
+        {
+          "client_id": "955930209044-dimurmc1ufh9a1rrnhf970l2f07saeig.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCc5ZrXNA1f-uE-_Q5oXvfQ64hT-3wUkM0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "955930209044-dimurmc1ufh9a1rrnhf970l2f07saeig.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "955930209044-7mh4ct4pjkorl40ikhd474gjdsrcjltv.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.makerFriend"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
