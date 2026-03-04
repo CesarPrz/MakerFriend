@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:maker_friend/themes/app_theme.dart';
+import 'package:maker_friend/themes/theme_controller.dart';
 import 'firebase_options.dart';
 import 'routing/app_router.dart';
 
@@ -16,10 +18,16 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final router = AppRouter.router();
 
-    return MaterialApp.router(
-      title: 'MakerFriend',
-      routerConfig: router,
-      theme: ThemeData(useMaterial3: true),
+    return ValueListenableBuilder(
+      valueListenable: ThemeController.mode,
+      builder: (_, ThemeMode mode, __) {
+        return MaterialApp.router(
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: mode,
+          routerConfig: router,
+        );
+      },
     );
   }
 }

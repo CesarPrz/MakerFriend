@@ -27,6 +27,12 @@ class TimelineRepository {
         .map((snap) => snap.docs.map(TimelineItem.fromDoc).toList());
   }
 
+  Future<void> _touchProjectTimeline(String projectId) async {
+    await FirebaseFirestore.instance.collection('projects').doc(projectId).set({
+      'lastTimelineUpdate': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<String> addStep({
     required String projectId,
     required String title,
@@ -45,7 +51,7 @@ class TimelineRepository {
       'authorPhotoUrl': user.photoURL,
       'photoUrls': <String>[],
     });
-
+    _touchProjectTimeline(projectId); // update lastTimelineUpdate du projet
     return doc.id;
   }
 
@@ -68,6 +74,31 @@ class TimelineRepository {
       'authorPhotoUrl': user.photoURL,
       'photoUrls': photoUrls,
     });
+    _touchProjectTimeline(projectId); // update lastTimelineUpdate du projet
+
+    return doc.id;
+  }
+
+  Future<String> addPhotoPost({
+    required String projectId,
+    required String title,
+    String? body,
+    required List<String> photoUrls,
+  }) async {
+    final user = _auth.currentUser!;
+    final now = FieldValue.serverTimestamp();
+
+    final doc = await _timelineCol(projectId).add({
+      'type': 'post',
+      'title': title.trim(),
+      'body': (body == null || body.trim().isEmpty) ? null : body.trim(),
+      'createdAt': now,
+      'authorUid': user.uid,
+      'authorName': user.displayName,
+      'authorPhotoUrl': user.photoURL,
+      'photoUrls': photoUrls,
+    });
+    _touchProjectTimeline(projectId); // update lastTimelineUpdate du projet
 
     return doc.id;
   }
@@ -79,6 +110,7 @@ class TimelineRepository {
         .map((snap) => snap.docs.map(CommentModel.fromDoc).toList());
   }
 
+  // Ne compte pas comme une update du projet (pas de touchProjectTimeline) car c’est un simple commentaire, pas une vraie update du projet
   Future<void> addComment({
     required String projectId,
     required String itemId,
