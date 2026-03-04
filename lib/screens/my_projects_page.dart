@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/models/project_model.dart';
+import 'package:maker_friend/widgets/project_card.dart';
 
 import '../repositories/project_repository.dart';
 
@@ -66,25 +67,20 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
             );
           }
 
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+          return GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2, // mets 2 si tu veux une grille
+              childAspectRatio: 0.85,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
             itemCount: projects.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, i) {
-              final p = projects[i];
-              return Card(
-                child: ListTile(
-                  title: Text(p.title),
-                  subtitle: (p.description == null || p.description!.isEmpty)
-                      ? null
-                      : Text(
-                          p.description!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/projects/${p.id}/timeline'),
-                ),
+              final doc = projects[i];
+              return ProjectCard(
+                project: doc,
+                onTap: () => context.push('/my-projects/${doc.id}'),
               );
             },
           );
