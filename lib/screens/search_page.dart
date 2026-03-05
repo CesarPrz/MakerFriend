@@ -8,8 +8,6 @@ import '../models/project_model.dart';
 import '../models/app_user_model.dart';
 import '../widgets/project_card.dart';
 
-enum SearchTab { projects, users }
-
 class SearchPage extends StatefulWidget {
   final UserRepository userRepo;
   final ProjectRepository projectRepo;
@@ -26,7 +24,6 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   final _ctrl = TextEditingController();
   String _q = '';
-  SearchTab _tab = SearchTab.projects;
 
   @override
   void dispose() {
@@ -47,9 +44,7 @@ class _SearchPageState extends State<SearchPage> {
           autofocus: false,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: _tab == SearchTab.projects
-                ? 'Rechercher un projet…'
-                : 'Rechercher un maker…',
+            hintText: 'Rechercher des projets et des makers…',
             border: InputBorder.none,
             prefixIcon: const Icon(Icons.search),
             suffixIcon: q.isEmpty
@@ -64,36 +59,10 @@ class _SearchPageState extends State<SearchPage> {
           ),
           onChanged: (v) => setState(() => _q = v),
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: SegmentedButton<SearchTab>(
-              segments: const [
-                ButtonSegment(
-                  value: SearchTab.projects,
-                  icon: Icon(Icons.folder_outlined),
-                  label: Text('Projets'),
-                ),
-                ButtonSegment(
-                  value: SearchTab.users,
-                  icon: Icon(Icons.person_outline),
-                  label: Text('Makers'),
-                ),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (s) {
-                setState(() => _tab = s.first);
-              },
-            ),
-          ),
-        ),
       ),
       body: q.isEmpty
           ? const _EmptySearchHint()
-          : _tab == SearchTab.projects
-          ? _ProjectResults(queryLower: q)
-          : _UserResults(queryLower: q),
+          : _CombinedResults(queryLower: q),
     );
   }
 }
@@ -107,7 +76,7 @@ class _EmptySearchHint extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.all(24),
         child: Text(
-          "Tape un mot-clé pour rechercher.\n\nEx: “impression”, “Arduino”…",
+          "Tape un mot-clé pour rechercher partout.\n\nEx: “impression”, “Arduino”, “Alice”…",
           textAlign: TextAlign.center,
         ),
       ),
@@ -115,55 +84,124 @@ class _EmptySearchHint extends StatelessWidget {
   }
 }
 
-/// --------- PROJECT SEARCH (prefix) ----------
-class _ProjectResults extends StatelessWidget {
+class _CombinedResults extends StatelessWidget {
   final String queryLower;
-  const _ProjectResults({required this.queryLower});
+  const _CombinedResults({required this.queryLower});
 
-  Query<Map<String, dynamic>> _query() {
+  Query<Map<String, dynamic>> _projectQuery() {
     final db = FirebaseFirestore.instance;
     final ref = db.collection('projects');
 
-    // Requête prefix: titleLower startsWith queryLower
     return ref
         .orderBy('titleLower')
         .startAt([queryLower])
         .endAt(['$queryLower\uf8ff'])
-        .limit(50);
+        .limit(20);
+  }
+
+  Query<Map<String, dynamic>> _userQuery() {
+    final db = FirebaseFirestore.instance;
+    final ref = db.collection('users');
+
+    return ref
+        .orderBy('displayNameLower')
+        .startAt([queryLower])
+        .endAt(['$queryLower\uf8ff'])
+        .limit(20);
   }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _query().snapshots(),
-      builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text('Erreur: ${snap.error}'));
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+      stream: _projectQuery().snapshots(),
+      builder: (context, projectSnap) {
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: _userQuery().snapshots(),
+          builder: (context, userSnap) {
+            if (projectSnap.hasError) {
+              return Center(child: Text('Erreur projets: ${projectSnap.error}'));
+            }
+            if (userSnap.hasError) {
+              return Center(child: Text('Erreur makers: ${userSnap.error}'));
+            }
 
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) {
-          return const Center(child: Text("Aucun projet trouvé."));
-        }
+            final loading = !projectSnap.hasData || !userSnap.hasData;
+            if (loading) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-        // ⚠️ Ici on construit Project sans owner hydraté (si tu veux owner, on branchera ton ProjectRepository)
-        final projects = docs.map(Project.fromDoc).toList();
+            final projects = projectSnap.data!.docs.map(Project.fromDoc).toList();
+            final users = userSnap.data!.docs
+                .map((d) => AppUser.fromFirestore(d))
+                .toList();
 
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 0.78,
-          ),
-          itemCount: projects.length,
-          itemBuilder: (context, i) {
-            final p = projects[i];
-            return ProjectCard(
-              project: p,
-              onTap: () => context.push('/my-projects/${p.id}'),
+            if (projects.isEmpty && users.isEmpty) {
+              return const Center(
+                child: Text('Aucun résultat trouvé pour cette recherche.'),
+              );
+            }
+
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+              children: [
+                _SectionHeader(
+                  icon: Icons.folder_outlined,
+                  title: 'Projets',
+                  count: projects.length,
+                ),
+                const SizedBox(height: 8),
+                if (projects.isEmpty)
+                  const _EmptySectionMessage(message: 'Aucun projet trouvé.')
+                else
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 0.78,
+                        ),
+                    itemCount: projects.length,
+                    itemBuilder: (context, i) {
+                      final p = projects[i];
+                      return ProjectCard(
+                        project: p,
+                        onTap: () => context.push('/my-projects/${p.id}'),
+                      );
+                    },
+                  ),
+                const SizedBox(height: 24),
+                _SectionHeader(
+                  icon: Icons.person_outline,
+                  title: 'Makers',
+                  count: users.length,
+                ),
+                const SizedBox(height: 8),
+                if (users.isEmpty)
+                  const _EmptySectionMessage(message: 'Aucun maker trouvé.')
+                else
+                  ...users.map(
+                    (u) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage:
+                              (u.photoUrl != null && u.photoUrl!.isNotEmpty)
+                              ? NetworkImage(u.photoUrl!)
+                              : null,
+                          child: (u.photoUrl == null || u.photoUrl!.isEmpty)
+                              ? const Icon(Icons.person)
+                              : null,
+                        ),
+                        title: Text(u.displayName ?? 'Maker'),
+                        subtitle: Text(u.uid),
+                        onTap: () => context.push('/u/${u.uid}'),
+                      ),
+                    ),
+                  ),
+              ],
             );
           },
         );
@@ -172,64 +210,46 @@ class _ProjectResults extends StatelessWidget {
   }
 }
 
-/// --------- USER SEARCH (prefix) ----------
-class _UserResults extends StatelessWidget {
-  final String queryLower;
-  const _UserResults({required this.queryLower});
+class _SectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final int count;
 
-  Query<Map<String, dynamic>> _query() {
-    final db = FirebaseFirestore.instance;
-    final ref = db.collection('users');
-
-    return ref
-        .orderBy('displayNameLower')
-        .startAt([queryLower])
-        .endAt(['$queryLower\uf8ff'])
-        .limit(50);
-  }
+  const _SectionHeader({
+    required this.icon,
+    required this.title,
+    required this.count,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _query().snapshots(),
-      builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text('Erreur: ${snap.error}'));
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Row(
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          '$title ($count)',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+      ],
+    );
+  }
+}
 
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) {
-          return const Center(child: Text("Aucun maker trouvé."));
-        }
+class _EmptySectionMessage extends StatelessWidget {
+  final String message;
 
-        final users = docs.map((d) => AppUser.fromFirestore(d)).toList();
+  const _EmptySectionMessage({required this.message});
 
-        return ListView.separated(
-          padding: const EdgeInsets.all(12),
-          itemCount: users.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) {
-            final u = users[i];
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundImage: (u.photoUrl != null && u.photoUrl!.isNotEmpty)
-                    ? NetworkImage(u.photoUrl!)
-                    : null,
-                child: (u.photoUrl == null || u.photoUrl!.isEmpty)
-                    ? const Icon(Icons.person)
-                    : null,
-              ),
-              title: Text(u.displayName ?? 'Maker'),
-              subtitle: Text(u.uid),
-              onTap: () {
-                // plus tard : page profil autre user
-                context.push('/u/${u.uid}');
-              },
-            );
-          },
-        );
-      },
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(message),
     );
   }
 }
