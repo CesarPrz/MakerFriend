@@ -33,17 +33,25 @@ class UserRepository {
     });
   }
 
-  Future<List<AppUser>> searchUsersByDisplayName(String query) async {
-    final queryLower = query.toLowerCase();
-    final snap = await _users
-        .orderBy('displayName')
-        .startAt([queryLower])
-        .endAt(['$queryLower\uf8ff'])
-        .limit(50)
-        .get();
+  Future<List<AppUser>> searchUsersByDisplayName(
+    String query, {
+    int limit = 50,
+  }) async {
+    final queryLower = query.trim().toLowerCase();
+    if (queryLower.isEmpty) return [];
 
-    return snap.docs.map((d) => AppUser.fromJson(d.data())).toList();
+    final snap = await _users.limit(limit).get();
+
+    return snap.docs
+        .map((d) => AppUser.fromJson(d.data()))
+        .where(
+          (u) =>
+              (u.displayName ?? '').toLowerCase().contains(queryLower) ||
+              u.uid.toLowerCase().contains(queryLower),
+        )
+        .toList();
   }
+
 
   /// Lecture 1 fois
   Future<AppUser?> getUser(String uid) async {
