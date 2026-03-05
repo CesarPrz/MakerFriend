@@ -20,7 +20,7 @@ firebase deploy --only firestore:rules,functions
 
 ### Structure attendue
 
-- `functions/src/index.ts`: triggers `onFollowingCreated` et `onFollowingDeleted`
+- `functions/index.js`: triggers `onFollowingCreated` et `onFollowingDeleted`
 - `firestore.rules`: droits sur `users/*/following/*` et lecture seule sur `users/*/followers/*`
 
 ## Getting Started
