@@ -22,11 +22,6 @@
   },
   "functions": [
     {
-      "codebase": "default",
-      "source": "functions"
-    },
-    {
-      "source": "cloudfunctions",
       "codebase": "makerfriend",
       "ignore": [
         "node_modules",
@@ -38,7 +33,8 @@
       "predeploy": [
         "npm --prefix \"$RESOURCE_DIR\" run lint",
         "npm --prefix \"$RESOURCE_DIR\" run build"
-      ]
+      ],
+      "source": "functions"
     }
   ],
   "firestore": {
