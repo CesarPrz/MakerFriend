@@ -60,6 +60,13 @@ class AppRouter {
       },
       routes: [
         GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+        GoRoute(
+          path: '/u/:uid',
+          builder: (context, state) {
+            final uid = state.pathParameters['uid'];
+            return ProfilePage(uid: uid);
+          },
+        ),
 
         /// ✅ Shell avec bottom navigation
         StatefulShellRoute.indexedStack(
