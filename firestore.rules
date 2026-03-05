@@ -19,10 +19,15 @@ service cloud.firestore {
       allow create, update: if isSelf(uid);
       allow delete: if false;
 
-      // Following docs: gérés uniquement par Cloud Functions callable (admin SDK).
+      // Following docs: écrits par le user connecté uniquement sur son propre profil.
       match /following/{targetUid} {
         allow read: if signedIn();
-        allow write: if false;
+        allow create: if isSelf(uid)
+          && targetUid != uid
+          && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+          && request.resource.data.uid == targetUid;
+        allow delete: if isSelf(uid);
+        allow update: if false;
       }
 
       // Followers docs: gérés uniquement par Cloud Functions (admin SDK bypass rules).
