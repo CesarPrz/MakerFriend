@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/project_model.dart';
 import '../repositories/project_repository.dart';
+import '../repositories/user_repository.dart';
 import '../widgets/project_card.dart';
 
 class ProfilePage extends StatelessWidget {
@@ -22,27 +24,24 @@ class ProfilePage extends StatelessWidget {
     }
 
     final isMe = me?.uid == profileUid;
-    final repo = ProjectRepository();
+    final projectRepo = context.read<ProjectRepository>();
+    final userRepo = context.read<UserRepository>();
 
-    // Pour l’instant, stats suivis/followers = 0 (on branchera plus tard)
-    // Projet count -> basé sur la liste de projets chargée (simple et fiable)
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            // HEADER PROFIL
             _ProfileHeader(
               uid: profileUid,
+              currentUid: me?.uid,
               isMe: isMe,
+              userRepo: userRepo,
               onEditProfile: isMe ? () => context.push('/settings') : null,
             ),
-
             const SizedBox(height: 8),
-
-            // LISTE PROJETS (comme ton UI actuelle)
             Expanded(
               child: StreamBuilder<List<Project>>(
-                stream: repo.watchProjectsForOwner(profileUid),
+                stream: projectRepo.watchProjectsForOwner(profileUid),
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
@@ -67,16 +66,14 @@ class ProfilePage extends StatelessWidget {
                     );
                   }
 
-                  // ✅ Grid compact 2 colonnes (tu peux remettre 1 si tu préfères)
                   return GridView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 0.70,
-                        ),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                      childAspectRatio: 0.70,
+                    ),
                     itemCount: projects.length,
                     itemBuilder: (context, i) {
                       final p = projects[i];
@@ -92,8 +89,6 @@ class ProfilePage extends StatelessWidget {
           ],
         ),
       ),
-
-      // ✅ garde ton FAB "Créer un projet" uniquement pour mon profil
       floatingActionButton: isMe
           ? FloatingActionButton.extended(
               onPressed: () => context.push('/my-projects/new'),
@@ -105,15 +100,18 @@ class ProfilePage extends StatelessWidget {
   }
 }
 
-/// Header style Instagram
 class _ProfileHeader extends StatelessWidget {
   final String uid;
+  final String? currentUid;
   final bool isMe;
+  final UserRepository userRepo;
   final VoidCallback? onEditProfile;
 
   const _ProfileHeader({
     required this.uid,
+    required this.currentUid,
     required this.isMe,
+    required this.userRepo,
     required this.onEditProfile,
   });
 
@@ -128,16 +126,11 @@ class _ProfileHeader extends StatelessWidget {
       builder: (context, snap) {
         final data = snap.data?.data();
         final displayName =
-            (data?['displayName'] as String?) ??
-            FirebaseAuth.instance.currentUser?.displayName ??
-            'Maker';
+            (data?['displayName'] as String?) ?? FirebaseAuth.instance.currentUser?.displayName ?? 'Maker';
 
-        final photoUrl =
-            (data?['photoUrl'] as String?) ??
-            FirebaseAuth.instance.currentUser?.photoURL;
+        final photoUrl = (data?['photoUrl'] as String?) ?? FirebaseAuth.instance.currentUser?.photoURL;
 
-        // Pour l’instant : stats “mock” (on branchera à ton système followers plus tard)
-        final projectsCount = null; // on peut l’afficher plus bas si besoin
+        final projectsCount = null;
         final followingCount = (data?['followingCount'] as int?) ?? 0;
         final followersCount = (data?['followersCount'] as int?) ?? 0;
 
@@ -146,13 +139,11 @@ class _ProfileHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Ligne principale : avatar + stats
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   _ProfileAvatar(photoUrl: photoUrl),
                   const SizedBox(width: 16),
-
                   Expanded(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -165,35 +156,68 @@ class _ProfileHeader extends StatelessWidget {
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
               Text(displayName, style: Theme.of(context).textTheme.titleMedium),
-
               const SizedBox(height: 12),
-
-              if (isMe) ...[
+              if (isMe)
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: onEditProfile,
                     child: const Text('Modifier le profil'),
                   ),
+                )
+              else
+                _FollowButton(
+                  currentUid: currentUid,
+                  targetUid: uid,
+                  userRepo: userRepo,
                 ),
-              ] else ...[
-                // plus tard : Follow/Unfollow
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () {},
-                    child: const Text('Suivre'),
-                  ),
-                ),
-              ],
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _FollowButton extends StatelessWidget {
+  final String? currentUid;
+  final String targetUid;
+  final UserRepository userRepo;
+
+  const _FollowButton({
+    required this.currentUid,
+    required this.targetUid,
+    required this.userRepo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final me = currentUid;
+    if (me == null || me == targetUid) {
+      return const SizedBox.shrink();
+    }
+
+    return SizedBox(
+      width: double.infinity,
+      child: StreamBuilder<bool>(
+        stream: userRepo.watchIsFollowing(currentUid: me, targetUid: targetUid),
+        builder: (context, snap) {
+          final isFollowing = snap.data ?? false;
+
+          return FilledButton(
+            onPressed: () async {
+              if (isFollowing) {
+                await userRepo.unfollowUser(currentUid: me, targetUid: targetUid);
+              } else {
+                await userRepo.followUser(currentUid: me, targetUid: targetUid);
+              }
+            },
+            child: Text(isFollowing ? 'Suivi' : 'Suivre'),
+          );
+        },
+      ),
     );
   }
 }
@@ -209,12 +233,8 @@ class _ProfileAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: 38,
       backgroundColor: bg,
-      backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty)
-          ? NetworkImage(photoUrl!)
-          : null,
-      child: (photoUrl == null || photoUrl!.isEmpty)
-          ? const Icon(Icons.person, size: 36)
-          : null,
+      backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
+      child: (photoUrl == null || photoUrl!.isEmpty) ? const Icon(Icons.person, size: 36) : null,
     );
   }
 }
