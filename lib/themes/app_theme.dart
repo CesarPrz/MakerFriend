@@ -30,7 +30,9 @@ class AppTheme {
         backgroundColor: accent,
         foregroundColor: Colors.white,
       ),
-
+      navigationBarTheme: NavigationBarThemeData(
+        overlayColor: WidgetStatePropertyAll(Colors.transparent),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: accent,
@@ -61,7 +63,9 @@ class AppTheme {
         onPrimary: Colors.black,
         onSurface: Colors.white,
       ),
-
+      navigationBarTheme: NavigationBarThemeData(
+        overlayColor: WidgetStatePropertyAll(Colors.transparent),
+      ),
       scaffoldBackgroundColor: Colors.black,
 
       appBarTheme: const AppBarTheme(

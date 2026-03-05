@@ -57,7 +57,6 @@ class DiscoverPage extends StatelessWidget {
                   // context.push('/projects/${project.id}');
 
                   // ✅ sinon (selon ton router actuel)
-                  context.push('/my-projects/${project.id}');
                 },
               );
             },

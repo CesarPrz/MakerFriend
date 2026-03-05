@@ -13,7 +13,7 @@ class Project {
   final String title;
   final String? description;
   final String? coverUrl;
-
+  final List<String> types;
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final DateTime? lastTimelineUpdate;
@@ -30,6 +30,7 @@ class Project {
     this.updatedAt,
     this.followersCount = 0,
     this.lastTimelineUpdate,
+    this.types = const [],
   });
 
   /// Firestore -> Project (sans owner)
@@ -46,6 +47,9 @@ class Project {
       updatedAt: _tsToDt(data['updatedAt']),
       lastTimelineUpdate: _tsToDt(data['lastTimelineUpdate']),
       followersCount: (data['followersCount'] as int?) ?? 0,
+      types: ((data['types'] as List?) ?? const [])
+          .whereType<String>()
+          .toList(),
     );
   }
 
@@ -62,6 +66,7 @@ class Project {
       updatedAt: updatedAt,
       lastTimelineUpdate: lastTimelineUpdate,
       followersCount: followersCount,
+      types: types,
     );
   }
 
@@ -77,6 +82,7 @@ class Project {
           ? null
           : Timestamp.fromDate(lastTimelineUpdate!),
       'followersCount': followersCount,
+      'types': types,
     }..removeWhere((k, v) => v == null);
   }
 

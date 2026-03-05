@@ -6,6 +6,8 @@ import 'package:maker_friend/login_page.dart';
 import 'package:maker_friend/screens/discover_page.dart';
 import 'package:maker_friend/screens/main_scaffold.dart';
 import 'package:maker_friend/screens/my_projects_page.dart';
+import 'package:maker_friend/screens/profile_page.dart';
+import 'package:maker_friend/screens/project_form_page.dart';
 import 'package:maker_friend/screens/settings_page.dart';
 import 'package:maker_friend/screens/theme_settings_page.dart';
 
@@ -66,8 +68,12 @@ class AppRouter {
               routes: [
                 GoRoute(
                   path: '/my-projects',
-                  builder: (context, state) => const MyProjectsPage(),
+                  builder: (context, state) => const ProfilePage(),
                   routes: [
+                    GoRoute(
+                      path: 'new',
+                      builder: (context, state) => const ProjectFormPage(),
+                    ),
                     GoRoute(
                       path: ':projectId',
                       builder: (context, state) {
@@ -75,6 +81,13 @@ class AppRouter {
                         return ProjectDetailPage(projectId: projectId);
                       },
                       routes: [
+                        GoRoute(
+                          path: 'edit',
+                          builder: (context, state) {
+                            final id = state.pathParameters['projectId']!;
+                            return ProjectFormPage(projectId: id);
+                          },
+                        ),
                         GoRoute(
                           path: 'timeline',
                           builder: (context, state) {

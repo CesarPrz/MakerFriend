@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:maker_friend/models/app_user_model.dart';
 import '../models/project_model.dart';
 
 class ProjectCard extends StatelessWidget {
@@ -10,8 +11,12 @@ class ProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final owner = project.owner;
-
+    final AppUser? owner = project.owner;
+    final TextStyle titleStyle = Theme.of(context).textTheme.titleMedium!;
+    final double titleLineHeight =
+        (titleStyle.fontSize ?? 16) * (titleStyle.height ?? 1.2);
+    // 2 lignes
+    final double titleBoxHeight = titleLineHeight * 2;
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -21,63 +26,74 @@ class ProjectCard extends StatelessWidget {
           children: [
             _CoverImage(url: project.coverUrl),
 
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  /// TITLE
-                  Text(
-                    project.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  /// OWNER + FOLLOWERS
-                  Row(
-                    children: [
-                      _Avatar(url: owner?.photoUrl),
-
-                      const SizedBox(width: 8),
-
-                      Expanded(
-                        child: Text(
-                          owner?.displayName ?? "Maker",
-                          style: Theme.of(context).textTheme.bodyMedium,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-
-                      Row(
-                        children: [
-                          const Icon(Icons.star_border, size: 32),
-                          const SizedBox(width: 4),
-                          Text(
-                            project.followersCount.toString(),
-                            style: Theme.of(context).textTheme.bodyMedium,
+            // ✅ IMPORTANT: Expanded pour donner une hauteur finie au contenu
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment:
+                      MainAxisAlignment.spaceBetween, // ✅ bas collé
+                  children: [
+                    // Haut
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: titleBoxHeight,
+                          child: Text(
+                            project.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: titleStyle,
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ),
 
-                  const SizedBox(height: 6),
-
-                  /// UPDATED DATE
-                  Row(
-                    children: [
-                      const Icon(Icons.update, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formatDate(project.lastTimelineUpdate),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ],
+                    // Bas
+                    Row(
+                      children: [
+                        _Avatar(url: owner?.photoUrl, size: 24),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            owner?.displayName ?? "Maker",
+                            style: Theme.of(context).textTheme.bodyMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.update, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatDate(project.lastTimelineUpdate),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            const Icon(Icons.star, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              project.followersCount.toString(),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -130,18 +146,18 @@ class _CoverImage extends StatelessWidget {
 
 class _Avatar extends StatelessWidget {
   final String? url;
-
-  const _Avatar({this.url});
+  final double size;
+  const _Avatar({this.url, this.size = 32});
 
   @override
   Widget build(BuildContext context) {
     if (url == null) {
-      return const CircleAvatar(
-        radius: 16,
+      return CircleAvatar(
+        radius: size / 2,
         child: Icon(Icons.person, size: 18),
       );
     }
 
-    return CircleAvatar(radius: 16, backgroundImage: NetworkImage(url!));
+    return CircleAvatar(radius: size / 2, backgroundImage: NetworkImage(url!));
   }
 }
