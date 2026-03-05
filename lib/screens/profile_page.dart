@@ -119,6 +119,24 @@ class _ProfileHeader extends StatelessWidget {
     return FirebaseFirestore.instance.collection('users').doc(uid).snapshots();
   }
 
+  Stream<int> _watchFollowingCount() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('following')
+        .snapshots()
+        .map((snap) => snap.size);
+  }
+
+  Stream<int> _watchFollowersCount() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('followers')
+        .snapshots()
+        .map((snap) => snap.size);
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -131,8 +149,6 @@ class _ProfileHeader extends StatelessWidget {
         final photoUrl = (data?['photoUrl'] as String?) ?? FirebaseAuth.instance.currentUser?.photoURL;
 
         final projectsCount = null;
-        final followingCount = (data?['followingCount'] as int?) ?? 0;
-        final followersCount = (data?['followersCount'] as int?) ?? 0;
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -149,8 +165,27 @@ class _ProfileHeader extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         _StatTile(label: 'Projets', value: projectsCount),
-                        _StatTile(label: 'Suivis', value: followingCount),
-                        _StatTile(label: 'Followers', value: followersCount),
+                        StreamBuilder<int>(
+                          stream: _watchFollowingCount(),
+                          builder: (context, countSnap) {
+                            return _StatTile(
+                              label: 'Suivis',
+                              value: countSnap.data ?? 0,
+                            );
+                          },
+                        ),
+                        StreamBuilder<int>(
+                          stream: _watchFollowersCount(),
+                          builder: (context, countSnap) {
+                            if (countSnap.hasError) {
+                              return const _StatTile(label: 'Followers', value: 0);
+                            }
+                            return _StatTile(
+                              label: 'Followers',
+                              value: countSnap.data ?? 0,
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -181,7 +216,7 @@ class _ProfileHeader extends StatelessWidget {
   }
 }
 
-class _FollowButton extends StatelessWidget {
+class _FollowButton extends StatefulWidget {
   final String? currentUid;
   final String targetUid;
   final UserRepository userRepo;
@@ -193,28 +228,85 @@ class _FollowButton extends StatelessWidget {
   });
 
   @override
+  State<_FollowButton> createState() => _FollowButtonState();
+}
+
+class _FollowButtonState extends State<_FollowButton> {
+  bool _busy = false;
+
+  Future<void> _toggleFollow({
+    required BuildContext context,
+    required bool isFollowing,
+  }) async {
+    final me = widget.currentUid;
+    if (me == null || _busy) return;
+
+    setState(() => _busy = true);
+    try {
+      if (isFollowing) {
+        await widget.userRepo.unfollowUser(currentUid: me, targetUid: widget.targetUid);
+      } else {
+        await widget.userRepo.followUser(currentUid: me, targetUid: widget.targetUid);
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur follow: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final me = currentUid;
-    if (me == null || me == targetUid) {
+    final me = widget.currentUid;
+    if (me == null || me == widget.targetUid) {
       return const SizedBox.shrink();
     }
 
     return SizedBox(
       width: double.infinity,
       child: StreamBuilder<bool>(
-        stream: userRepo.watchIsFollowing(currentUid: me, targetUid: targetUid),
+        stream: widget.userRepo.watchIsFollowing(
+          currentUid: me,
+          targetUid: widget.targetUid,
+        ),
         builder: (context, snap) {
           final isFollowing = snap.data ?? false;
+          final onPressed = _busy
+              ? null
+              : () => _toggleFollow(
+                    context: context,
+                    isFollowing: isFollowing,
+                  );
 
-          return FilledButton(
-            onPressed: () async {
-              if (isFollowing) {
-                await userRepo.unfollowUser(currentUid: me, targetUid: targetUid);
-              } else {
-                await userRepo.followUser(currentUid: me, targetUid: targetUid);
-              }
-            },
-            child: Text(isFollowing ? 'Suivi' : 'Suivre'),
+          if (isFollowing) {
+            return OutlinedButton.icon(
+              onPressed: onPressed,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check, size: 18),
+              label: const Text('Suivi'),
+            );
+          }
+
+          return FilledButton.icon(
+            onPressed: onPressed,
+            icon: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.person_add, size: 18),
+            label: const Text('Suivre'),
           );
         },
       ),

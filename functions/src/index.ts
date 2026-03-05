@@ -26,13 +26,14 @@ export const onFollowingCreated = onDocumentCreated(
 
     await db.runTransaction(async (tx) => {
       const followerSnap = await tx.get(followerRef);
-      if (!followerSnap.exists) {
-        tx.set(followerRef, {
-          uid,
-          createdAt: FieldValue.serverTimestamp(),
-        });
+      if (followerSnap.exists) {
+        return;
       }
 
+      tx.set(followerRef, {
+        uid,
+        createdAt: FieldValue.serverTimestamp(),
+      });
       tx.set(sourceUserRef, {
         followingCount: FieldValue.increment(1),
       }, { merge: true });
@@ -48,7 +49,7 @@ export const onFollowingCreated = onDocumentCreated(
 /**
  * Trigger: users/{uid}/following/{targetUid} DELETED
  * - delete mirror doc: users/{targetUid}/followers/{uid}
- * - decrement counters (bounded to >=0)
+ * - decrement counters
  */
 export const onFollowingDeleted = onDocumentDeleted(
   'users/{uid}/following/{targetUid}',
@@ -62,19 +63,17 @@ export const onFollowingDeleted = onDocumentDeleted(
     const targetUserRef = db.collection('users').doc(targetUid);
 
     await db.runTransaction(async (tx) => {
+      const followerSnap = await tx.get(followerRef);
+      if (!followerSnap.exists) {
+        return;
+      }
+
       tx.delete(followerRef);
-
-      const sourceSnap = await tx.get(sourceUserRef);
-      const targetSnap = await tx.get(targetUserRef);
-
-      const currentFollowing = Number(sourceSnap.get('followingCount') || 0);
-      const currentFollowers = Number(targetSnap.get('followersCount') || 0);
-
       tx.set(sourceUserRef, {
-        followingCount: Math.max(0, currentFollowing - 1),
+        followingCount: FieldValue.increment(-1),
       }, { merge: true });
       tx.set(targetUserRef, {
-        followersCount: Math.max(0, currentFollowers - 1),
+        followersCount: FieldValue.increment(-1),
       }, { merge: true });
     });
 

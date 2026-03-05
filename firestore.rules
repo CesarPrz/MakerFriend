@@ -33,7 +33,13 @@ service cloud.firestore {
       // Followers docs: gérés uniquement par Cloud Functions (admin SDK bypass rules).
       match /followers/{followerUid} {
         allow read: if signedIn();
-        allow write: if false;
+        allow create: if signedIn()
+          && request.auth.uid == followerUid
+          && followerUid != uid
+          && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+          && request.resource.data.uid == followerUid;
+        allow delete: if signedIn() && request.auth.uid == followerUid;
+        allow update: if false;
       }
     }
 

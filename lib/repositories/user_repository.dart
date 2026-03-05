@@ -16,7 +16,8 @@ class UserRepository {
     FirebaseFunctions? functions,
   }) : _db = db ?? FirebaseFirestore.instance,
        _auth = auth ?? FirebaseAuth.instance,
-       _functions = functions ?? FirebaseFunctions.instanceFor(region: 'us-central1');
+       _functions =
+           functions ?? FirebaseFunctions.instanceFor(region: 'us-central1');
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _db.collection('users');
@@ -57,7 +58,6 @@ class UserRepository {
         )
         .toList();
   }
-
 
   /// Lecture 1 fois
   Future<AppUser?> getUser(String uid) async {
@@ -130,9 +130,6 @@ class UserRepository {
         .doc(targetUid)
         .collection('followers')
         .doc(currentUid);
-    final meRef = _users.doc(currentUid);
-    final targetRef = _users.doc(targetUid);
-
     await _db.runTransaction((tx) async {
       final followingSnap = await tx.get(meFollowingRef);
       if (followingSnap.exists) return;
@@ -140,8 +137,6 @@ class UserRepository {
       final now = FieldValue.serverTimestamp();
       tx.set(meFollowingRef, {'uid': targetUid, 'createdAt': now});
       tx.set(targetFollowerRef, {'uid': currentUid, 'createdAt': now});
-      tx.set(meRef, {'followingCount': FieldValue.increment(1)}, SetOptions(merge: true));
-      tx.set(targetRef, {'followersCount': FieldValue.increment(1)}, SetOptions(merge: true));
     });
   }
 
@@ -161,17 +156,10 @@ class UserRepository {
         .doc(targetUid)
         .collection('followers')
         .doc(currentUid);
-    final meRef = _users.doc(currentUid);
-    final targetRef = _users.doc(targetUid);
 
     await _db.runTransaction((tx) async {
-      final followingSnap = await tx.get(meFollowingRef);
-      if (!followingSnap.exists) return;
-
       tx.delete(meFollowingRef);
       tx.delete(targetFollowerRef);
-      tx.set(meRef, {'followingCount': FieldValue.increment(-1)}, SetOptions(merge: true));
-      tx.set(targetRef, {'followersCount': FieldValue.increment(-1)}, SetOptions(merge: true));
     });
   }
 }
