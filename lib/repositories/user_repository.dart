@@ -33,16 +33,23 @@ class UserRepository {
     });
   }
 
-  Future<List<AppUser>> searchUsersByDisplayName(String query) async {
-    final queryLower = query.toLowerCase();
-    final snap = await _users
-        .orderBy('displayName')
-        .startAt([queryLower])
-        .endAt(['$queryLower\uf8ff'])
-        .limit(50)
-        .get();
+  Future<List<AppUser>> searchUsersByDisplayName(
+    String query, {
+    int limit = 50,
+  }) async {
+    final queryLower = query.trim().toLowerCase();
+    if (queryLower.isEmpty) return [];
 
-    return snap.docs.map((d) => AppUser.fromJson(d.data())).toList();
+    final snap = await _users.limit(limit).get();
+
+    return snap.docs
+        .map((d) => AppUser.fromJson(d.data()))
+        .where(
+          (u) =>
+              (u.displayName ?? '').toLowerCase().contains(queryLower) ||
+              u.uid.toLowerCase().contains(queryLower),
+        )
+        .toList();
   }
 
   /// Lecture 1 fois
@@ -82,6 +89,49 @@ class UserRepository {
   /// Patch partiel (ex: changer displayName côté app)
   Future<void> updateUser(String uid, Map<String, dynamic> data) async {
     await _users.doc(uid).set(data, SetOptions(merge: true));
+  }
+
+  Stream<bool> watchIsFollowing({
+    required String currentUid,
+    required String targetUid,
+  }) {
+    if (currentUid.isEmpty || targetUid.isEmpty || currentUid == targetUid) {
+      return Stream.value(false);
+    }
+
+    return _users
+        .doc(currentUid)
+        .collection('following')
+        .doc(targetUid)
+        .snapshots()
+        .map((doc) => doc.exists);
+  }
+
+  /// Le client écrit seulement users/{me}/following/{target}.
+  /// La synchronisation followers + compteurs est gérée par Cloud Function.
+  Future<void> followUser({
+    required String currentUid,
+    required String targetUid,
+  }) async {
+    if (currentUid.isEmpty || targetUid.isEmpty || currentUid == targetUid) {
+      return;
+    }
+
+    await _users.doc(currentUid).collection('following').doc(targetUid).set({
+      'uid': targetUid,
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> unfollowUser({
+    required String currentUid,
+    required String targetUid,
+  }) async {
+    if (currentUid.isEmpty || targetUid.isEmpty || currentUid == targetUid) {
+      return;
+    }
+
+    await _users.doc(currentUid).collection('following').doc(targetUid).delete();
   }
 }
 
