@@ -52,6 +52,7 @@ class UserRepository {
         .toList();
   }
 
+
   /// Lecture 1 fois
   Future<AppUser?> getUser(String uid) async {
     final doc = await _users.doc(uid).get();
@@ -107,8 +108,6 @@ class UserRepository {
         .map((doc) => doc.exists);
   }
 
-  /// Le client écrit seulement users/{me}/following/{target}.
-  /// La synchronisation followers + compteurs est gérée par Cloud Function.
   Future<void> followUser({
     required String currentUid,
     required String targetUid,
@@ -117,10 +116,27 @@ class UserRepository {
       return;
     }
 
-    await _users.doc(currentUid).collection('following').doc(targetUid).set({
-      'uid': targetUid,
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final meFollowingRef = _users
+        .doc(currentUid)
+        .collection('following')
+        .doc(targetUid);
+    final targetFollowerRef = _users
+        .doc(targetUid)
+        .collection('followers')
+        .doc(currentUid);
+    final meRef = _users.doc(currentUid);
+    final targetRef = _users.doc(targetUid);
+
+    await _db.runTransaction((tx) async {
+      final followingSnap = await tx.get(meFollowingRef);
+      if (followingSnap.exists) return;
+
+      final now = FieldValue.serverTimestamp();
+      tx.set(meFollowingRef, {'uid': targetUid, 'createdAt': now});
+      tx.set(targetFollowerRef, {'uid': currentUid, 'createdAt': now});
+      tx.set(meRef, {'followingCount': FieldValue.increment(1)}, SetOptions(merge: true));
+      tx.set(targetRef, {'followersCount': FieldValue.increment(1)}, SetOptions(merge: true));
+    });
   }
 
   Future<void> unfollowUser({
@@ -131,7 +147,26 @@ class UserRepository {
       return;
     }
 
-    await _users.doc(currentUid).collection('following').doc(targetUid).delete();
+    final meFollowingRef = _users
+        .doc(currentUid)
+        .collection('following')
+        .doc(targetUid);
+    final targetFollowerRef = _users
+        .doc(targetUid)
+        .collection('followers')
+        .doc(currentUid);
+    final meRef = _users.doc(currentUid);
+    final targetRef = _users.doc(targetUid);
+
+    await _db.runTransaction((tx) async {
+      final followingSnap = await tx.get(meFollowingRef);
+      if (!followingSnap.exists) return;
+
+      tx.delete(meFollowingRef);
+      tx.delete(targetFollowerRef);
+      tx.set(meRef, {'followingCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+      tx.set(targetRef, {'followersCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+    });
   }
 }
 
