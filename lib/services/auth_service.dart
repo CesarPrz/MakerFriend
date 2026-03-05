@@ -18,7 +18,8 @@ class AuthService {
   Stream<User?> authStateChanges() => _auth.authStateChanges();
 
   Future<UserCredential?> signInWithGoogle() async {
-    final googleUser = await _googleSignIn.signIn();
+    await GoogleSignIn().signOut();
+    final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
     if (googleUser == null) return null;
 
     final googleAuth = await googleUser.authentication;
