@@ -33,17 +33,25 @@ class UserRepository {
     });
   }
 
-  Future<List<AppUser>> searchUsersByDisplayName(String query) async {
-    final queryLower = query.toLowerCase();
-    final snap = await _users
-        .orderBy('displayName')
-        .startAt([queryLower])
-        .endAt(['$queryLower\uf8ff'])
-        .limit(50)
-        .get();
+  Future<List<AppUser>> searchUsersByDisplayName(
+    String query, {
+    int limit = 50,
+  }) async {
+    final queryLower = query.trim().toLowerCase();
+    if (queryLower.isEmpty) return [];
 
-    return snap.docs.map((d) => AppUser.fromJson(d.data())).toList();
+    final snap = await _users.limit(limit).get();
+
+    return snap.docs
+        .map((d) => AppUser.fromJson(d.data()))
+        .where(
+          (u) =>
+              (u.displayName ?? '').toLowerCase().contains(queryLower) ||
+              u.uid.toLowerCase().contains(queryLower),
+        )
+        .toList();
   }
+
 
   /// Lecture 1 fois
   Future<AppUser?> getUser(String uid) async {
@@ -82,6 +90,83 @@ class UserRepository {
   /// Patch partiel (ex: changer displayName côté app)
   Future<void> updateUser(String uid, Map<String, dynamic> data) async {
     await _users.doc(uid).set(data, SetOptions(merge: true));
+  }
+
+  Stream<bool> watchIsFollowing({
+    required String currentUid,
+    required String targetUid,
+  }) {
+    if (currentUid.isEmpty || targetUid.isEmpty || currentUid == targetUid) {
+      return Stream.value(false);
+    }
+
+    return _users
+        .doc(currentUid)
+        .collection('following')
+        .doc(targetUid)
+        .snapshots()
+        .map((doc) => doc.exists);
+  }
+
+  Future<void> followUser({
+    required String currentUid,
+    required String targetUid,
+  }) async {
+    if (currentUid.isEmpty || targetUid.isEmpty || currentUid == targetUid) {
+      return;
+    }
+
+    final meFollowingRef = _users
+        .doc(currentUid)
+        .collection('following')
+        .doc(targetUid);
+    final targetFollowerRef = _users
+        .doc(targetUid)
+        .collection('followers')
+        .doc(currentUid);
+    final meRef = _users.doc(currentUid);
+    final targetRef = _users.doc(targetUid);
+
+    await _db.runTransaction((tx) async {
+      final followingSnap = await tx.get(meFollowingRef);
+      if (followingSnap.exists) return;
+
+      final now = FieldValue.serverTimestamp();
+      tx.set(meFollowingRef, {'uid': targetUid, 'createdAt': now});
+      tx.set(targetFollowerRef, {'uid': currentUid, 'createdAt': now});
+      tx.set(meRef, {'followingCount': FieldValue.increment(1)}, SetOptions(merge: true));
+      tx.set(targetRef, {'followersCount': FieldValue.increment(1)}, SetOptions(merge: true));
+    });
+  }
+
+  Future<void> unfollowUser({
+    required String currentUid,
+    required String targetUid,
+  }) async {
+    if (currentUid.isEmpty || targetUid.isEmpty || currentUid == targetUid) {
+      return;
+    }
+
+    final meFollowingRef = _users
+        .doc(currentUid)
+        .collection('following')
+        .doc(targetUid);
+    final targetFollowerRef = _users
+        .doc(targetUid)
+        .collection('followers')
+        .doc(currentUid);
+    final meRef = _users.doc(currentUid);
+    final targetRef = _users.doc(targetUid);
+
+    await _db.runTransaction((tx) async {
+      final followingSnap = await tx.get(meFollowingRef);
+      if (!followingSnap.exists) return;
+
+      tx.delete(meFollowingRef);
+      tx.delete(targetFollowerRef);
+      tx.set(meRef, {'followingCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+      tx.set(targetRef, {'followersCount': FieldValue.increment(-1)}, SetOptions(merge: true));
+    });
   }
 }
 

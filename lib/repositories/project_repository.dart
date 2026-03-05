@@ -62,6 +62,24 @@ class ProjectRepository {
     return _hydrateProjectsFromSnapshot(snap);
   }
 
+  Future<List<Project>> searchProjects(String query, {int limit = 50}) async {
+    final queryLower = query.trim().toLowerCase();
+    if (queryLower.isEmpty) return [];
+
+    final snap = await _projects.orderBy('title').limit(limit).get();
+    final filtered = snap.docs
+        .map(Project.fromDoc)
+        .where(
+          (p) =>
+              p.title.toLowerCase().contains(queryLower) ||
+              (p.description ?? '').toLowerCase().contains(queryLower) ||
+              p.types.any((t) => t.toLowerCase().contains(queryLower)),
+        )
+        .toList();
+
+    return _hydrateProjects(filtered);
+  }
+
   Future<String> createProject({
     required String ownerUid,
     required String title,
@@ -113,18 +131,16 @@ class ProjectRepository {
   Future<List<Project>> _hydrateProjectsFromSnapshot(
     QuerySnapshot<Map<String, dynamic>> snap,
   ) async {
-    final projects = snap.docs.map(Project.fromDoc).toList();
+    return _hydrateProjects(snap.docs.map(Project.fromDoc).toList());
+  }
 
-    // collect unique owner uids
+  Future<List<Project>> _hydrateProjects(List<Project> projects) async {
     final ownerUids = <String>{};
     for (final p in projects) {
       if (p.ownerUid.isNotEmpty) ownerUids.add(p.ownerUid);
     }
 
-    // fetch missing users in parallel
-    final missing = ownerUids
-        .where((uid) => !_userCache.containsKey(uid))
-        .toList();
+    final missing = ownerUids.where((uid) => !_userCache.containsKey(uid)).toList();
     if (missing.isNotEmpty) {
       final fetched = await Future.wait(missing.map(_getUser));
       for (final u in fetched) {
@@ -132,7 +148,6 @@ class ProjectRepository {
       }
     }
 
-    // attach owner
     return projects.map((p) {
       final owner = _userCache[p.ownerUid];
       return owner == null ? p : p.withOwner(owner);
