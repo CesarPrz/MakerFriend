@@ -2,15 +2,21 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:maker_friend/models/app_user_model.dart';
 
 class UserRepository {
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  final FirebaseFunctions _functions;
 
-  UserRepository({FirebaseFirestore? db, FirebaseAuth? auth})
-    : _db = db ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+  UserRepository({
+    FirebaseFirestore? db,
+    FirebaseAuth? auth,
+    FirebaseFunctions? functions,
+  }) : _db = db ?? FirebaseFirestore.instance,
+       _auth = auth ?? FirebaseAuth.instance,
+       _functions = functions ?? FirebaseFunctions.instanceFor(region: 'us-central1');
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _db.collection('users');
