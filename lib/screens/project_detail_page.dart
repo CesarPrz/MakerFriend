@@ -138,11 +138,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               if (owner)
                 IconButton(
                   tooltip: 'Modifier',
-                  onPressed: () => _editText(
-                    title: 'Modifier le projet',
-                    initialTitle: title,
-                    initialDescription: description ?? "",
-                  ),
+                  onPressed: () => context.push('/my-projects/$projectId/edit'),
                   icon: const Icon(Icons.edit),
                 ),
             ],

@@ -65,7 +65,9 @@ class ProjectRepository {
   Future<String> createProject({
     required String ownerUid,
     required String title,
+
     String? description,
+    List<String> types = const [],
   }) async {
     final now = FieldValue.serverTimestamp();
 
@@ -77,6 +79,7 @@ class ProjectRepository {
           : description.trim(),
       'coverUrl': null,
       'createdAt': now,
+      'types': types,
       'updatedAt': now,
       'lastTimelineUpdate': now,
       'followersCount': 0,
@@ -89,6 +92,7 @@ class ProjectRepository {
     String projectId, {
     String? title,
     String? description,
+    List<String>? types,
     String? coverUrl,
   }) async {
     final data = <String, dynamic>{'updatedAt': FieldValue.serverTimestamp()};
@@ -100,7 +104,7 @@ class ProjectRepository {
           : description.trim();
     }
     if (coverUrl != null) data['coverUrl'] = coverUrl;
-
+    if (types != null) data['types'] = types;
     await _projectRef(projectId).set(data, SetOptions(merge: true));
   }
 

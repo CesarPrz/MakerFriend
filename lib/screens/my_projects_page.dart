@@ -40,7 +40,7 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Mes Projets')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openCreateProjectDialog,
+        onPressed: () => context.push('/my-projects/new'),
         icon: const Icon(Icons.add),
         label: const Text('Créer un projet'),
       ),
@@ -70,8 +70,7 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
           return GridView.builder(
             padding: const EdgeInsets.all(12),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // mets 2 si tu veux une grille
-              childAspectRatio: 0.85,
+              crossAxisCount: 1, // mets 2 si tu veux une grille
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
             ),

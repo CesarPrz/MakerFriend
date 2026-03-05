@@ -18,22 +18,34 @@ class MainScaffold extends StatelessWidget {
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
+        height: 60,
+
+        indicatorColor: Colors.transparent,
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: _onTap,
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore),
+            icon: const Icon(Icons.explore_outlined),
+            selectedIcon: Icon(
+              Icons.explore,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             label: 'Découvrir',
           ),
           NavigationDestination(
-            icon: Icon(Icons.folder_outlined),
-            selectedIcon: Icon(Icons.folder),
+            icon: const Icon(Icons.folder_outlined),
+            selectedIcon: Icon(
+              Icons.folder,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             label: 'Mes projets',
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
+            icon: const Icon(Icons.settings_outlined),
+            selectedIcon: Icon(
+              Icons.settings,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
             label: 'Paramètres',
           ),
         ],
