@@ -117,10 +117,17 @@ class UserRepository {
       return;
     }
 
-    await _users.doc(currentUid).collection('following').doc(targetUid).set({
-      'uid': targetUid,
-      'createdAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    final ref = _users.doc(currentUid).collection('following').doc(targetUid);
+
+    try {
+      await ref.create({
+        'uid': targetUid,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      // idempotent côté client: si déjà suivi, on ignore.
+      if (e.code != 'already-exists') rethrow;
+    }
   }
 
   Future<void> unfollowUser({
