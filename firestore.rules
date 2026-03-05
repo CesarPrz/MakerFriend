@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isOwner(project) {
+      return signedIn() && project.data.ownerUid == request.auth.uid;
+    }
+
+    // USERS
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(uid);
+      allow delete: if false;
+
+      // Following docs: écrits par le user connecté uniquement sur son propre profil.
+      match /following/{targetUid} {
+        allow read: if signedIn();
+        allow create: if isSelf(uid)
+          && targetUid != uid
+          && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+          && request.resource.data.uid == targetUid;
+        allow delete: if isSelf(uid);
+        allow update: if false;
+      }
+
+      // Followers docs: gérés uniquement par Cloud Functions (admin SDK bypass rules).
+      match /followers/{followerUid} {
+        allow read: if signedIn();
+        allow write: if false;
+      }
+    }
+
+    // PROJECTS
+    match /projects/{projectId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isOwner(resource);
+      allow delete: if false;
+
+      match /timeline/{docId} {
+        allow read: if signedIn();
+        allow create, update, delete: if isOwner(get(/databases/$(database)/documents/projects/$(projectId)));
+
+        match /comments/{commentId} {
+          allow read: if signedIn();
+          allow create: if signedIn()
+            && request.resource.data.authorUid == request.auth.uid;
+          allow update, delete: if signedIn()
+            && resource.data.authorUid == request.auth.uid;
+        }
+      }
+    }
+  }
+}

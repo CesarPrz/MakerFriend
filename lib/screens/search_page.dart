@@ -1,14 +1,11 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/repositories/project_repository.dart';
 import 'package:maker_friend/repositories/user_repository.dart';
 
-import '../models/project_model.dart';
 import '../models/app_user_model.dart';
+import '../models/project_model.dart';
 import '../widgets/project_card.dart';
-
-enum SearchTab { projects, users }
 
 class SearchPage extends StatefulWidget {
   final UserRepository userRepo;
@@ -26,7 +23,6 @@ class SearchPage extends StatefulWidget {
 class _SearchPageState extends State<SearchPage> {
   final _ctrl = TextEditingController();
   String _q = '';
-  SearchTab _tab = SearchTab.projects;
 
   @override
   void dispose() {
@@ -34,11 +30,11 @@ class _SearchPageState extends State<SearchPage> {
     super.dispose();
   }
 
-  String get _queryLower => _q.trim().toLowerCase();
+  String get _query => _q.trim();
 
   @override
   Widget build(BuildContext context) {
-    final q = _queryLower;
+    final q = _query;
 
     return Scaffold(
       appBar: AppBar(
@@ -47,9 +43,7 @@ class _SearchPageState extends State<SearchPage> {
           autofocus: false,
           textInputAction: TextInputAction.search,
           decoration: InputDecoration(
-            hintText: _tab == SearchTab.projects
-                ? 'Rechercher un projet…'
-                : 'Rechercher un maker…',
+            hintText: 'Rechercher des projets et des makers…',
             border: InputBorder.none,
             prefixIcon: const Icon(Icons.search),
             suffixIcon: q.isEmpty
@@ -64,36 +58,14 @@ class _SearchPageState extends State<SearchPage> {
           ),
           onChanged: (v) => setState(() => _q = v),
         ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: SegmentedButton<SearchTab>(
-              segments: const [
-                ButtonSegment(
-                  value: SearchTab.projects,
-                  icon: Icon(Icons.folder_outlined),
-                  label: Text('Projets'),
-                ),
-                ButtonSegment(
-                  value: SearchTab.users,
-                  icon: Icon(Icons.person_outline),
-                  label: Text('Makers'),
-                ),
-              ],
-              selected: {_tab},
-              onSelectionChanged: (s) {
-                setState(() => _tab = s.first);
-              },
-            ),
-          ),
-        ),
       ),
       body: q.isEmpty
           ? const _EmptySearchHint()
-          : _tab == SearchTab.projects
-          ? _ProjectResults(queryLower: q)
-          : _UserResults(queryLower: q),
+          : _CombinedResults(
+              query: q,
+              userRepo: widget.userRepo,
+              projectRepo: widget.projectRepo,
+            ),
     );
   }
 }
@@ -107,7 +79,7 @@ class _EmptySearchHint extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.all(24),
         child: Text(
-          "Tape un mot-clé pour rechercher.\n\nEx: “impression”, “Arduino”…",
+          "Tape un mot-clé pour rechercher partout.\n\nEx: “impression”, “Arduino”, “Alice”…",
           textAlign: TextAlign.center,
         ),
       ),
@@ -115,121 +87,182 @@ class _EmptySearchHint extends StatelessWidget {
   }
 }
 
-/// --------- PROJECT SEARCH (prefix) ----------
-class _ProjectResults extends StatelessWidget {
-  final String queryLower;
-  const _ProjectResults({required this.queryLower});
+class _CombinedResults extends StatefulWidget {
+  final String query;
+  final UserRepository userRepo;
+  final ProjectRepository projectRepo;
 
-  Query<Map<String, dynamic>> _query() {
-    final db = FirebaseFirestore.instance;
-    final ref = db.collection('projects');
+  const _CombinedResults({
+    required this.query,
+    required this.userRepo,
+    required this.projectRepo,
+  });
 
-    // Requête prefix: titleLower startsWith queryLower
-    return ref
-        .orderBy('titleLower')
-        .startAt([queryLower])
-        .endAt(['$queryLower\uf8ff'])
-        .limit(50);
+  @override
+  State<_CombinedResults> createState() => _CombinedResultsState();
+}
+
+class _CombinedResultsState extends State<_CombinedResults> {
+  late Future<_SearchResultsBundle> _searchFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFuture = _loadResults();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CombinedResults oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.query != widget.query) {
+      _searchFuture = _loadResults();
+    }
+  }
+
+  Future<_SearchResultsBundle> _loadResults() async {
+    final results = await Future.wait([
+      widget.projectRepo.searchProjects(widget.query, limit: 100),
+      widget.userRepo.searchUsersByDisplayName(widget.query, limit: 100),
+    ]);
+
+    final projects = results[0] as List<Project>;
+    final users = results[1] as List<AppUser>;
+    return _SearchResultsBundle(projects: projects, users: users);
   }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _query().snapshots(),
+    return FutureBuilder<_SearchResultsBundle>(
+      future: _searchFuture,
       builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text('Erreur: ${snap.error}'));
+        if (snap.hasError) {
+          return Center(child: Text('Erreur recherche: ${snap.error}'));
+        }
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) {
-          return const Center(child: Text("Aucun projet trouvé."));
+        final projects = snap.data!.projects;
+        final users = snap.data!.users;
+
+        if (projects.isEmpty && users.isEmpty) {
+          return const Center(
+            child: Text('Aucun résultat trouvé pour cette recherche.'),
+          );
         }
 
-        // ⚠️ Ici on construit Project sans owner hydraté (si tu veux owner, on branchera ton ProjectRepository)
-        final projects = docs.map(Project.fromDoc).toList();
-
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 0.78,
-          ),
-          itemCount: projects.length,
-          itemBuilder: (context, i) {
-            final p = projects[i];
-            return ProjectCard(
-              project: p,
-              onTap: () => context.push('/my-projects/${p.id}'),
-            );
-          },
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          children: [
+            _SectionHeader(
+              icon: Icons.folder_outlined,
+              title: 'Projets',
+              count: projects.length,
+            ),
+            const SizedBox(height: 8),
+            if (projects.isEmpty)
+              const _EmptySectionMessage(message: 'Aucun projet trouvé.')
+            else
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.78,
+                ),
+                itemCount: projects.length,
+                itemBuilder: (context, i) {
+                  final p = projects[i];
+                  return ProjectCard(
+                    project: p,
+                    onTap: () => context.push('/my-projects/${p.id}'),
+                  );
+                },
+              ),
+            const SizedBox(height: 24),
+            _SectionHeader(
+              icon: Icons.person_outline,
+              title: 'Makers',
+              count: users.length,
+            ),
+            const SizedBox(height: 8),
+            if (users.isEmpty)
+              const _EmptySectionMessage(message: 'Aucun maker trouvé.')
+            else
+              ...users.map(
+                (u) => Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundImage: (u.photoUrl != null && u.photoUrl!.isNotEmpty)
+                          ? NetworkImage(u.photoUrl!)
+                          : null,
+                      child: (u.photoUrl == null || u.photoUrl!.isEmpty)
+                          ? const Icon(Icons.person)
+                          : null,
+                    ),
+                    title: Text(u.displayName ?? 'Maker'),
+                    subtitle: Text(u.uid),
+                    onTap: () => context.push('/u/${u.uid}'),
+                  ),
+                ),
+              ),
+          ],
         );
       },
     );
   }
 }
 
-/// --------- USER SEARCH (prefix) ----------
-class _UserResults extends StatelessWidget {
-  final String queryLower;
-  const _UserResults({required this.queryLower});
+class _SearchResultsBundle {
+  final List<Project> projects;
+  final List<AppUser> users;
 
-  Query<Map<String, dynamic>> _query() {
-    final db = FirebaseFirestore.instance;
-    final ref = db.collection('users');
+  const _SearchResultsBundle({required this.projects, required this.users});
+}
 
-    return ref
-        .orderBy('displayNameLower')
-        .startAt([queryLower])
-        .endAt(['$queryLower\uf8ff'])
-        .limit(50);
-  }
+class _SectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final int count;
+
+  const _SectionHeader({
+    required this.icon,
+    required this.title,
+    required this.count,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: _query().snapshots(),
-      builder: (context, snap) {
-        if (snap.hasError) return Center(child: Text('Erreur: ${snap.error}'));
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Row(
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          '$title ($count)',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+      ],
+    );
+  }
+}
 
-        final docs = snap.data!.docs;
-        if (docs.isEmpty) {
-          return const Center(child: Text("Aucun maker trouvé."));
-        }
+class _EmptySectionMessage extends StatelessWidget {
+  final String message;
 
-        final users = docs.map((d) => AppUser.fromFirestore(d)).toList();
+  const _EmptySectionMessage({required this.message});
 
-        return ListView.separated(
-          padding: const EdgeInsets.all(12),
-          itemCount: users.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) {
-            final u = users[i];
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundImage: (u.photoUrl != null && u.photoUrl!.isNotEmpty)
-                    ? NetworkImage(u.photoUrl!)
-                    : null,
-                child: (u.photoUrl == null || u.photoUrl!.isEmpty)
-                    ? const Icon(Icons.person)
-                    : null,
-              ),
-              title: Text(u.displayName ?? 'Maker'),
-              subtitle: Text(u.uid),
-              onTap: () {
-                // plus tard : page profil autre user
-                context.push('/u/${u.uid}');
-              },
-            );
-          },
-        );
-      },
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(message),
     );
   }
 }
