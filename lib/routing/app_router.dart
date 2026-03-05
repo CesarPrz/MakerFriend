@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/login_page.dart';
+import 'package:maker_friend/repositories/project_repository.dart';
+import 'package:maker_friend/repositories/timeline_repository.dart';
+import 'package:maker_friend/repositories/user_repository.dart';
 import 'package:maker_friend/screens/discover_page.dart';
 import 'package:maker_friend/screens/main_scaffold.dart';
 import 'package:maker_friend/screens/my_projects_page.dart';
 import 'package:maker_friend/screens/profile_page.dart';
 import 'package:maker_friend/screens/project_form_page.dart';
+import 'package:maker_friend/screens/search_page.dart';
 import 'package:maker_friend/screens/settings_page.dart';
 import 'package:maker_friend/screens/theme_settings_page.dart';
 
@@ -31,6 +36,15 @@ class AuthListenable extends ChangeNotifier {
 }
 
 class AppRouter {
+  final UserRepository userRepo;
+  final ProjectRepository projectRepo;
+  final TimelineRepository timelineRepo;
+
+  AppRouter({
+    required this.userRepo,
+    required this.projectRepo,
+    required this.timelineRepo,
+  });
   static final _auth = AuthListenable();
 
   static GoRouter router() {
@@ -62,7 +76,17 @@ class AppRouter {
                 ),
               ],
             ),
-
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/search',
+                  builder: (context, state) => SearchPage(
+                    userRepo: context.read<UserRepository>(),
+                    projectRepo: context.read<ProjectRepository>(),
+                  ),
+                ),
+              ],
+            ),
             // 2) Mes projets
             StatefulShellBranch(
               routes: [

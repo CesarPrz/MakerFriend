@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:maker_friend/repositories/project_repository.dart';
+import 'package:maker_friend/repositories/timeline_repository.dart';
+import 'package:maker_friend/repositories/user_repository.dart';
 import 'package:maker_friend/themes/app_theme.dart';
 import 'package:maker_friend/themes/theme_controller.dart';
 import 'firebase_options.dart';
@@ -21,11 +25,18 @@ class MyApp extends StatelessWidget {
     return ValueListenableBuilder(
       valueListenable: ThemeController.mode,
       builder: (_, ThemeMode mode, __) {
-        return MaterialApp.router(
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          themeMode: mode,
-          routerConfig: router,
+        return MultiRepositoryProvider(
+          providers: [
+            RepositoryProvider(create: (_) => UserRepository()),
+            RepositoryProvider(create: (_) => ProjectRepository()),
+            RepositoryProvider(create: (_) => TimelineRepository()),
+          ],
+          child: MaterialApp.router(
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: mode,
+            routerConfig: router,
+          ),
         );
       },
     );

@@ -33,6 +33,15 @@ class MainScaffold extends StatelessWidget {
             label: 'Découvrir',
           ),
           NavigationDestination(
+            icon: Icon(Icons.search),
+            label: 'Rechercher',
+            selectedIcon: Icon(
+              Icons.search,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
+          ),
+
+          NavigationDestination(
             icon: const Icon(Icons.folder_outlined),
             selectedIcon: Icon(
               Icons.folder,

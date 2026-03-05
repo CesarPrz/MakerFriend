@@ -53,10 +53,7 @@ class DiscoverPage extends StatelessWidget {
               return ProjectCard(
                 project: project,
                 onTap: () {
-                  // ✅ si tu as ajouté l’alias /projects/:projectId
-                  // context.push('/projects/${project.id}');
-
-                  // ✅ sinon (selon ton router actuel)
+                  context.push('/my-projects/${project.id}');
                 },
               );
             },
