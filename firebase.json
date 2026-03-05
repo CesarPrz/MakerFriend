@@ -1,1 +1,29 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"makerfriend-a3cc3","appId":"1:955930209044:android:c58f92f17138957df3b001","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"makerfriend-a3cc3","configurations":{"android":"1:955930209044:android:c58f92f17138957df3b001","ios":"1:955930209044:ios:1f2d93ed9b9319c6f3b001","web":"1:955930209044:web:87fc24a84a22694af3b001"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "makerfriend-a3cc3",
+          "appId": "1:955930209044:android:c58f92f17138957df3b001",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "makerfriend-a3cc3",
+          "configurations": {
+            "android": "1:955930209044:android:c58f92f17138957df3b001",
+            "ios": "1:955930209044:ios:1f2d93ed9b9319c6f3b001",
+            "web": "1:955930209044:web:87fc24a84a22694af3b001"
+          }
+        }
+      }
+    }
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}
