@@ -41,6 +41,15 @@ service cloud.firestore {
         allow delete: if signedIn() && request.auth.uid == followerUid;
         allow update: if false;
       }
+
+      match /likedProjects/{projectId} {
+        allow read: if signedIn();
+        allow create: if isSelf(uid)
+          && request.resource.data.keys().hasOnly(['projectId', 'createdAt'])
+          && request.resource.data.projectId == projectId;
+        allow delete: if isSelf(uid);
+        allow update: if false;
+      }
     }
 
     // PROJECTS
@@ -49,7 +58,7 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.ownerUid == request.auth.uid;
       allow update: if isOwner(resource);
-      allow delete: if false;
+      allow delete: if isOwner(resource);
 
       match /timeline/{docId} {
         allow read: if signedIn();

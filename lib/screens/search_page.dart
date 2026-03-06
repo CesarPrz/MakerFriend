@@ -177,7 +177,7 @@ class _CombinedResultsState extends State<_CombinedResults> {
                   final p = projects[i];
                   return ProjectCard(
                     project: p,
-                    onTap: () => context.push('/my-projects/${p.id}'),
+                    onTap: () => context.push('/my-projects/${p.id}/timeline'),
                   );
                 },
               ),
@@ -204,7 +204,6 @@ class _CombinedResultsState extends State<_CombinedResults> {
                           : null,
                     ),
                     title: Text(u.displayName ?? 'Maker'),
-                    subtitle: Text(u.uid),
                     onTap: () => context.push('/u/${u.uid}'),
                   ),
                 ),

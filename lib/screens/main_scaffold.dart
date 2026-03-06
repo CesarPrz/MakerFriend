@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class MainScaffold extends StatelessWidget {
@@ -8,7 +8,7 @@ class MainScaffold extends StatelessWidget {
   void _onTap(int index) {
     navigationShell.goBranch(
       index,
-      // si on retape le même onglet, on revient à la racine de l’onglet
+      // If user taps current tab, go back to that branch root.
       initialLocation: index == navigationShell.currentIndex,
     );
   }
@@ -19,7 +19,6 @@ class MainScaffold extends StatelessWidget {
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
         height: 60,
-
         indicatorColor: Colors.transparent,
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: _onTap,
@@ -30,17 +29,24 @@ class MainScaffold extends StatelessWidget {
               Icons.explore,
               color: Theme.of(context).colorScheme.secondary,
             ),
-            label: 'Découvrir',
+            label: 'Decouvrir',
           ),
           NavigationDestination(
-            icon: Icon(Icons.search),
-            label: 'Rechercher',
+            icon: const Icon(Icons.dynamic_feed_outlined),
+            selectedIcon: Icon(
+              Icons.dynamic_feed,
+              color: Theme.of(context).colorScheme.secondary,
+            ),
+            label: 'Mon fil',
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.search),
             selectedIcon: Icon(
               Icons.search,
               color: Theme.of(context).colorScheme.secondary,
             ),
+            label: 'Rechercher',
           ),
-
           NavigationDestination(
             icon: const Icon(Icons.folder_outlined),
             selectedIcon: Icon(
@@ -55,7 +61,7 @@ class MainScaffold extends StatelessWidget {
               Icons.settings,
               color: Theme.of(context).colorScheme.secondary,
             ),
-            label: 'Paramètres',
+            label: 'Parametres',
           ),
         ],
       ),

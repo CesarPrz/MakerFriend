@@ -21,6 +21,8 @@ class UserRepository {
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _db.collection('users');
+  CollectionReference<Map<String, dynamic>> get _projects =>
+      _db.collection('projects');
 
   /// Stream temps réel du user (Firestore)
   Stream<AppUser?> watchUser(String uid) {
@@ -96,6 +98,34 @@ class UserRepository {
   /// Patch partiel (ex: changer displayName côté app)
   Future<void> updateUser(String uid, Map<String, dynamic> data) async {
     await _users.doc(uid).set(data, SetOptions(merge: true));
+
+    final ownerUpdate = <String, dynamic>{};
+    if (data.containsKey('displayName')) {
+      ownerUpdate['ownerDisplayName'] = data['displayName'];
+    }
+    if (data.containsKey('photoUrl')) {
+      ownerUpdate['ownerPhotoUrl'] = data['photoUrl'];
+    }
+    if (ownerUpdate.isEmpty) return;
+
+    final projectsSnap = await _projects.where('ownerUid', isEqualTo: uid).get();
+    if (projectsSnap.docs.isEmpty) return;
+
+    WriteBatch batch = _db.batch();
+    var ops = 0;
+    for (final doc in projectsSnap.docs) {
+      batch.set(doc.reference, ownerUpdate, SetOptions(merge: true));
+      ops++;
+
+      if (ops == 450) {
+        await batch.commit();
+        batch = _db.batch();
+        ops = 0;
+      }
+    }
+    if (ops > 0) {
+      await batch.commit();
+    }
   }
 
   Stream<bool> watchIsFollowing({
@@ -112,6 +142,83 @@ class UserRepository {
         .doc(targetUid)
         .snapshots()
         .map((doc) => doc.exists);
+  }
+
+  Stream<List<AppUser>> watchFollowingUsers(String uid) {
+    return _watchUsersFromSubcollection(uid: uid, subcollection: 'following');
+  }
+
+  Stream<List<AppUser>> watchFollowersUsers(String uid) {
+    return _watchUsersFromSubcollection(uid: uid, subcollection: 'followers');
+  }
+
+  Stream<List<AppUser>> _watchUsersFromSubcollection({
+    required String uid,
+    required String subcollection,
+  }) {
+    if (uid.isEmpty) return Stream.value(const []);
+
+    final relationRef = _users.doc(uid).collection(subcollection);
+    late StreamSubscription<QuerySnapshot<Map<String, dynamic>>> relationSub;
+    final userSubs = <String, StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>>{};
+    final usersByUid = <String, AppUser>{};
+    final controller = StreamController<List<AppUser>>();
+
+    void emit() {
+      final users = usersByUid.values.toList()
+        ..sort((a, b) {
+          final an = (a.displayName ?? a.uid).toLowerCase();
+          final bn = (b.displayName ?? b.uid).toLowerCase();
+          return an.compareTo(bn);
+        });
+      controller.add(users);
+    }
+
+    Future<void> rebuildUserSubs(List<String> uids) async {
+      for (final sub in userSubs.values) {
+        await sub.cancel();
+      }
+      userSubs.clear();
+      usersByUid.clear();
+
+      if (uids.isEmpty) {
+        emit();
+        return;
+      }
+
+      for (final targetUid in uids) {
+        final sub = _users.doc(targetUid).snapshots().listen(
+          (doc) {
+            final data = doc.data();
+            if (!doc.exists || data == null) {
+              usersByUid.remove(targetUid);
+            } else {
+              usersByUid[targetUid] = AppUser.fromJson(data);
+            }
+            emit();
+          },
+          onError: controller.addError,
+        );
+        userSubs[targetUid] = sub;
+      }
+    }
+
+    relationSub = relationRef.snapshots().listen(
+      (snap) {
+        final uids = snap.docs.map((d) => d.id).toList();
+        rebuildUserSubs(uids);
+      },
+      onError: controller.addError,
+    );
+
+    controller.onCancel = () async {
+      await relationSub.cancel();
+      for (final sub in userSubs.values) {
+        await sub.cancel();
+      }
+    };
+
+    return controller.stream;
   }
 
   Future<void> followUser({

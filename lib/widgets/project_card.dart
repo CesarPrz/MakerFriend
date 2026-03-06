@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:maker_friend/models/app_user_model.dart';
+import 'package:maker_friend/repositories/project_repository.dart';
 import '../models/project_model.dart';
 
 class ProjectCard extends StatelessWidget {
@@ -82,12 +84,7 @@ class ProjectCard extends StatelessWidget {
                         ),
                         Row(
                           children: [
-                            const Icon(Icons.star, size: 16),
-                            const SizedBox(width: 4),
-                            Text(
-                              project.followersCount.toString(),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
+                            _LikeStatus(project: project),
                           ],
                         ),
                       ],
@@ -113,6 +110,52 @@ class ProjectCard extends StatelessWidget {
     if (diff.inDays < 7) return "il y a ${diff.inDays} j";
 
     return "${date.day}/${date.month}/${date.year}";
+  }
+}
+
+class _LikeStatus extends StatelessWidget {
+  final Project project;
+
+  const _LikeStatus({required this.project});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final repo = context.read<ProjectRepository>();
+
+    if (uid == null) {
+      return Row(
+        children: [
+          const Icon(Icons.favorite_border, size: 16),
+          const SizedBox(width: 4),
+          Text(
+            '${project.likesCount}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      );
+    }
+
+    return StreamBuilder<bool>(
+      stream: repo.watchIsProjectLiked(currentUid: uid, projectId: project.id),
+      builder: (context, snap) {
+        final isLiked = snap.data ?? false;
+        return Row(
+          children: [
+            Icon(
+              isLiked ? Icons.favorite : Icons.favorite_border,
+              size: 16,
+              color: isLiked ? Colors.redAccent : null,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${project.likesCount}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

@@ -8,8 +8,9 @@ import 'package:maker_friend/repositories/project_repository.dart';
 import 'package:maker_friend/repositories/timeline_repository.dart';
 import 'package:maker_friend/repositories/user_repository.dart';
 import 'package:maker_friend/screens/discover_page.dart';
+import 'package:maker_friend/screens/edit_profile_page.dart';
+import 'package:maker_friend/screens/feed_page.dart';
 import 'package:maker_friend/screens/main_scaffold.dart';
-import 'package:maker_friend/screens/my_projects_page.dart';
 import 'package:maker_friend/screens/profile_page.dart';
 import 'package:maker_friend/screens/project_form_page.dart';
 import 'package:maker_friend/screens/search_page.dart';
@@ -69,6 +70,13 @@ class AppRouter {
         ),
 
         /// ✅ Shell avec bottom navigation
+        GoRoute(
+          path: '/projects/:projectId',
+          builder: (context, state) {
+            final projectId = state.pathParameters['projectId']!;
+            return ProjectDetailPage(projectId: projectId);
+          },
+        ),
         StatefulShellRoute.indexedStack(
           builder: (context, state, navigationShell) {
             return MainScaffold(navigationShell: navigationShell);
@@ -80,6 +88,14 @@ class AppRouter {
                 GoRoute(
                   path: '/discover',
                   builder: (context, state) => const DiscoverPage(),
+                ),
+              ],
+            ),
+            StatefulShellBranch(
+              routes: [
+                GoRoute(
+                  path: '/feed',
+                  builder: (context, state) => const FeedPage(),
                 ),
               ],
             ),
@@ -168,6 +184,10 @@ class AppRouter {
                   path: '/settings',
                   builder: (context, state) => const SettingsPage(),
                   routes: [
+                    GoRoute(
+                      path: 'profile',
+                      builder: (context, state) => const EditProfilePage(),
+                    ),
                     GoRoute(
                       path: 'theme',
                       builder: (context, state) => const ThemeSettingsPage(),

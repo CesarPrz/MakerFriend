@@ -79,7 +79,7 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
               final doc = projects[i];
               return ProjectCard(
                 project: doc,
-                onTap: () => context.push('/my-projects/${doc.id}'),
+                onTap: () => context.push('/my-projects/${doc.id}/timeline'),
               );
             },
           );

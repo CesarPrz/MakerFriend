@@ -80,3 +80,66 @@ export const onFollowingDeleted = onDocumentDeleted(
     logger.info('Follow removed', { uid, targetUid });
   },
 );
+
+/**
+ * Trigger: users/{uid}/likedProjects/{projectId} CREATED
+ * - create mirror doc: projects/{projectId}/likes/{uid}
+ * - increment projects/{projectId}.likesCount
+ */
+export const onProjectLikedCreated = onDocumentCreated(
+  'users/{uid}/likedProjects/{projectId}',
+  async (event) => {
+    const { uid, projectId } = event.params;
+    if (!uid || !projectId) return;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectLikeRef = projectRef.collection('likes').doc(uid);
+
+    await db.runTransaction(async (tx) => {
+      const projectLikeSnap = await tx.get(projectLikeRef);
+      if (projectLikeSnap.exists) {
+        return;
+      }
+
+      tx.set(projectLikeRef, {
+        uid,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      tx.set(projectRef, {
+        likesCount: FieldValue.increment(1),
+      }, { merge: true });
+    });
+
+    logger.info('Project liked', { uid, projectId });
+  },
+);
+
+/**
+ * Trigger: users/{uid}/likedProjects/{projectId} DELETED
+ * - delete mirror doc: projects/{projectId}/likes/{uid}
+ * - decrement projects/{projectId}.likesCount
+ */
+export const onProjectLikedDeleted = onDocumentDeleted(
+  'users/{uid}/likedProjects/{projectId}',
+  async (event) => {
+    const { uid, projectId } = event.params;
+    if (!uid || !projectId) return;
+
+    const projectRef = db.collection('projects').doc(projectId);
+    const projectLikeRef = projectRef.collection('likes').doc(uid);
+
+    await db.runTransaction(async (tx) => {
+      const projectLikeSnap = await tx.get(projectLikeRef);
+      if (!projectLikeSnap.exists) {
+        return;
+      }
+
+      tx.delete(projectLikeRef);
+      tx.set(projectRef, {
+        likesCount: FieldValue.increment(-1),
+      }, { merge: true });
+    });
+
+    logger.info('Project unliked', { uid, projectId });
+  },
+);

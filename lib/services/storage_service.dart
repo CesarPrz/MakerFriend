@@ -49,4 +49,19 @@ class StorageService {
 
     return task.ref.getDownloadURL();
   }
+
+  Future<String> uploadUserAvatar({
+    required String uid,
+    required File file,
+  }) async {
+    final fileName = DateTime.now().millisecondsSinceEpoch.toString();
+    final ref = _storage.ref('users/$uid/avatar/$fileName.jpg');
+
+    final task = await ref.putFile(
+      file,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+
+    return task.ref.getDownloadURL();
+  }
 }

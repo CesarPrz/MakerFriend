@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../repositories/timeline_repository.dart';
 import '../services/storage_service.dart';
 
-enum NewItemType { step, post, photoPost }
+enum NewTimelineKind { post, step }
 
 class NewTimelineItemPage extends StatefulWidget {
   final String projectId;
@@ -23,8 +23,7 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
 
   final _titleCtrl = TextEditingController();
   final _bodyCtrl = TextEditingController();
-
-  NewItemType _type = NewItemType.step;
+  NewTimelineKind _kind = NewTimelineKind.post;
 
   final List<File> _images = [];
   bool _loading = false;
@@ -37,41 +36,9 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
     super.dispose();
   }
 
-  String get _appBarTitle {
-    switch (_type) {
-      case NewItemType.step:
-        return "Ajouter une étape";
-      case NewItemType.post:
-        return "Ajouter un post";
-      case NewItemType.photoPost:
-        return "Nouveau post photo";
-    }
-  }
-
-  String get _titleLabel {
-    switch (_type) {
-      case NewItemType.step:
-        return "Titre de l’étape";
-      case NewItemType.post:
-      case NewItemType.photoPost:
-        return "Titre du post";
-    }
-  }
-
-  String get _hintTitle {
-    switch (_type) {
-      case NewItemType.step:
-        return "Ex: Début de modélisation";
-      case NewItemType.post:
-      case NewItemType.photoPost:
-        return "Ex: Petit update du jour";
-    }
-  }
-
   Future<void> _pickImagesFromGallery() async {
     final xs = await _picker.pickMultiImage(imageQuality: 85, maxWidth: 2048);
     if (xs.isEmpty) return;
-
     setState(() {
       _images.addAll(xs.map((x) => File(x.path)));
     });
@@ -84,7 +51,6 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
       maxWidth: 2048,
     );
     if (x == null) return;
-
     setState(() {
       _images.add(File(x.path));
     });
@@ -95,12 +61,7 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
 
     final title = _titleCtrl.text.trim();
     if (title.isEmpty) {
-      setState(() => _error = "Le titre est obligatoire");
-      return;
-    }
-
-    if (_type == NewItemType.photoPost && _images.isEmpty) {
-      setState(() => _error = "Choisis au moins une image");
+      setState(() => _error = 'Le titre est obligatoire');
       return;
     }
 
@@ -110,29 +71,22 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
     });
 
     try {
-      if (_type == NewItemType.step) {
+      final urls = <String>[];
+      for (final img in _images) {
+        final url = await _storage.uploadProjectTimelineImage(
+          projectId: widget.projectId,
+          file: img,
+        );
+        urls.add(url);
+      }
+
+      if (_kind == NewTimelineKind.step) {
         await _timelineRepo.addStep(
           projectId: widget.projectId,
           title: title,
           body: _bodyCtrl.text,
         );
-      } else if (_type == NewItemType.post) {
-        await _timelineRepo.addPost(
-          projectId: widget.projectId,
-          title: title,
-          body: _bodyCtrl.text,
-        );
       } else {
-        // photo post
-        final urls = <String>[];
-        for (final img in _images) {
-          final url = await _storage.uploadProjectTimelineImage(
-            projectId: widget.projectId,
-            file: img,
-          );
-          urls.add(url);
-        }
-
         await _timelineRepo.addPost(
           projectId: widget.projectId,
           title: title,
@@ -151,117 +105,115 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isPhoto = _type == NewItemType.photoPost;
-
     return Scaffold(
-      appBar: AppBar(title: Text(_appBarTitle)),
+      appBar: AppBar(title: const Text('Nouveau Post')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            SegmentedButton<NewItemType>(
+            SegmentedButton<NewTimelineKind>(
               segments: const [
                 ButtonSegment(
-                  value: NewItemType.step,
-                  label: Text("Étape"),
-                  icon: Icon(Icons.flag),
+                  value: NewTimelineKind.post,
+                  label: Text('Post'),
+                  icon: Icon(Icons.chat_bubble_outline),
                 ),
                 ButtonSegment(
-                  value: NewItemType.post,
-                  label: Text("Post"),
-                  icon: Icon(Icons.chat),
-                ),
-                ButtonSegment(
-                  value: NewItemType.photoPost,
-                  label: Text("Photo"),
-                  icon: Icon(Icons.photo_camera),
+                  value: NewTimelineKind.step,
+                  label: Text('Etape'),
+                  icon: Icon(Icons.flag_outlined),
                 ),
               ],
-              selected: {_type},
-              onSelectionChanged: (s) {
-                setState(() {
-                  _type = s.first;
-                  _error = null;
-                  // Option: reset image quand on quitte Photo
-                  if (_type != NewItemType.photoPost) _images.clear();
-                });
-              },
+              selected: {_kind},
+              onSelectionChanged: _loading
+                  ? null
+                  : (selection) {
+                      setState(() {
+                        _kind = selection.first;
+                        if (_kind == NewTimelineKind.step) {
+                          _images.clear();
+                        }
+                      });
+                    },
             ),
-
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Texte',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: _titleCtrl,
-              decoration: InputDecoration(
-                labelText: _titleLabel,
-                hintText: _hintTitle,
-              ),
               textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Titre',
+                hintText: 'Ex: Petit update du jour',
+              ),
             ),
-
             const SizedBox(height: 12),
-
             TextField(
               controller: _bodyCtrl,
               minLines: 3,
               maxLines: 6,
               decoration: const InputDecoration(
-                labelText: "Détails (optionnel)",
-                hintText: "Ex: paramètres, soucis, prochaine étape…",
+                labelText: 'Details (optionnel)',
+                hintText: 'Ex: avancee, blocages, prochaine etape...',
               ),
             ),
-
-            if (isPhoto) ...[
-              const SizedBox(height: 12),
-
+            const SizedBox(height: 16),
+            if (_kind == NewTimelineKind.post) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Images (optionnel)',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   OutlinedButton.icon(
                     onPressed: _loading ? null : _pickImagesFromGallery,
                     icon: const Icon(Icons.photo_library_outlined),
-                    label: const Text("Galerie"),
+                    label: const Text('Galerie'),
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
                     onPressed: _loading ? null : _takePhoto,
                     icon: const Icon(Icons.camera_alt),
-                    label: const Text("Caméra"),
+                    label: const Text('Camera'),
                   ),
                   const Spacer(),
                   if (_images.isNotEmpty)
                     TextButton(
-                      onPressed: _loading
-                          ? null
-                          : () => setState(() => _images.clear()),
-                      child: const Text("Tout retirer"),
+                      onPressed: _loading ? null : () => setState(_images.clear),
+                      child: const Text('Tout retirer'),
                     ),
                 ],
               ),
-
-              const SizedBox(height: 12),
-
-              const SizedBox(height: 12),
-
+              const SizedBox(height: 10),
               if (_images.isNotEmpty)
                 SizedBox(
-                  height: 220,
-                  child: GridView.builder(
+                  height: 150,
+                  child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 8,
-                          crossAxisSpacing: 8,
-                        ),
                     itemCount: _images.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
                     itemBuilder: (context, i) {
                       final f = _images[i];
                       return Stack(
-                        fit: StackFit.expand,
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.file(f, fit: BoxFit.cover),
+                            child: Image.file(
+                              f,
+                              width: 150,
+                              height: 150,
+                              fit: BoxFit.cover,
+                            ),
                           ),
                           Positioned(
                             top: 6,
@@ -291,24 +243,21 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
                 )
               else
                 Container(
-                  height: 180,
+                  height: 110,
                   width: double.infinity,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.black12),
                   ),
-                  child: const Text("Aperçu images"),
+                  child: const Text('Apercu images'),
                 ),
             ],
-
             if (_error != null) ...[
               const SizedBox(height: 12),
               Text(_error!, style: const TextStyle(color: Colors.red)),
             ],
-
             const Spacer(),
-
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -319,11 +268,17 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Icon(isPhoto ? Icons.cloud_upload : Icons.add),
+                    : Icon(
+                        _kind == NewTimelineKind.post
+                            ? Icons.cloud_upload
+                            : Icons.flag,
+                      ),
                 label: Text(
                   _loading
-                      ? (isPhoto ? "Upload..." : "Ajout...")
-                      : (isPhoto ? "Publier" : "Ajouter"),
+                      ? 'Publication...'
+                      : (_kind == NewTimelineKind.post
+                            ? 'Publier'
+                            : 'Ajouter l\'etape'),
                 ),
               ),
             ),

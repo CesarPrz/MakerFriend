@@ -19,6 +19,11 @@ class ProjectRepository {
   DocumentReference<Map<String, dynamic>> _projectRef(String projectId) =>
       _projects.doc(projectId);
 
+  DocumentReference<Map<String, dynamic>> _likedProjectRef(
+    String uid,
+    String projectId,
+  ) => _users.doc(uid).collection('likedProjects').doc(projectId);
+
   /// Cache mémoire pour éviter de re-fetch les mêmes users
   final Map<String, AppUser> _userCache = {};
 
@@ -88,9 +93,13 @@ class ProjectRepository {
     List<String> types = const [],
   }) async {
     final now = FieldValue.serverTimestamp();
+    final ownerDoc = await _users.doc(ownerUid).get();
+    final ownerData = ownerDoc.data();
 
     final doc = await _projects.add({
       'ownerUid': ownerUid,
+      'ownerDisplayName': ownerData?['displayName'],
+      'ownerPhotoUrl': ownerData?['photoUrl'],
       'title': title.trim(),
       'description': (description == null || description.trim().isEmpty)
           ? null
@@ -101,6 +110,7 @@ class ProjectRepository {
       'updatedAt': now,
       'lastTimelineUpdate': now,
       'followersCount': 0,
+      'likesCount': 0,
     });
 
     return doc.id;
@@ -126,6 +136,78 @@ class ProjectRepository {
     await _projectRef(projectId).set(data, SetOptions(merge: true));
   }
 
+  Future<void> deleteProject(String projectId) async {
+    if (projectId.isEmpty) return;
+    await _projectRef(projectId).delete();
+  }
+
+  Stream<bool> watchIsProjectLiked({
+    required String currentUid,
+    required String projectId,
+  }) {
+    if (currentUid.isEmpty || projectId.isEmpty) return Stream.value(false);
+    return _likedProjectRef(currentUid, projectId)
+        .snapshots()
+        .map((doc) => doc.exists);
+  }
+
+  Future<void> likeProject({
+    required String currentUid,
+    required String projectId,
+  }) async {
+    if (currentUid.isEmpty || projectId.isEmpty) return;
+    final ref = _likedProjectRef(currentUid, projectId);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (snap.exists) return;
+      tx.set(ref, {
+        'projectId': projectId,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  Future<void> unlikeProject({
+    required String currentUid,
+    required String projectId,
+  }) async {
+    if (currentUid.isEmpty || projectId.isEmpty) return;
+    await _likedProjectRef(currentUid, projectId).delete();
+  }
+
+  Stream<int> watchLikedProjectsCount(String uid) {
+    if (uid.isEmpty) return Stream.value(0);
+    return _users
+        .doc(uid)
+        .collection('likedProjects')
+        .snapshots()
+        .map((snap) => snap.size);
+  }
+
+  Stream<List<Project>> watchLikedProjects(String uid, {int limit = 100}) {
+    if (uid.isEmpty) return Stream.value(const []);
+    return _users
+        .doc(uid)
+        .collection('likedProjects')
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .asyncMap((snap) async {
+          final ids = snap.docs.map((d) => d.id).toList();
+          if (ids.isEmpty) return <Project>[];
+
+          final docs = await Future.wait(ids.map(_projectRef).map((r) => r.get()));
+          final projects = <Project>[];
+          for (final d in docs) {
+            final data = d.data();
+            if (!d.exists || data == null) continue;
+            projects.add(Project.fromDoc(d));
+          }
+
+          return _hydrateProjects(projects);
+        });
+  }
+
   /// ---- Internals ----
 
   Future<List<Project>> _hydrateProjectsFromSnapshot(
@@ -140,9 +222,9 @@ class ProjectRepository {
       if (p.ownerUid.isNotEmpty) ownerUids.add(p.ownerUid);
     }
 
-    final missing = ownerUids.where((uid) => !_userCache.containsKey(uid)).toList();
-    if (missing.isNotEmpty) {
-      final fetched = await Future.wait(missing.map(_getUser));
+    final toRefresh = ownerUids.toList();
+    if (toRefresh.isNotEmpty) {
+      final fetched = await Future.wait(toRefresh.map(_getUser));
       for (final u in fetched) {
         if (u != null) _userCache[u.uid] = u;
       }
@@ -156,9 +238,6 @@ class ProjectRepository {
 
   Future<AppUser?> _getUser(String uid) async {
     if (uid.isEmpty) return null;
-    final cached = _userCache[uid];
-    if (cached != null) return cached;
-
     final doc = await _users.doc(uid).get();
     if (!doc.exists || doc.data() == null) return null;
 

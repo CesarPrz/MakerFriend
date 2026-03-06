@@ -69,13 +69,6 @@ class _TimelinePageState extends State<TimelinePage> {
                         onPressed: () => context.push('/projects/$projectId'),
                         icon: const Icon(Icons.info_outline),
                       ),
-                      IconButton(
-                        tooltip: 'Ajouter',
-                        onPressed: () => context.push(
-                          '/my-projects/$projectId/timeline/new',
-                        ),
-                        icon: const Icon(Icons.add),
-                      ),
                     ],
 
                     flexibleSpace: LayoutBuilder(
@@ -170,6 +163,27 @@ class _TimelinePageState extends State<TimelinePage> {
                           // Ici constraints vient du bottom, donc on réutilise plutôt un Builder simple:
                           return const SizedBox.shrink();
                         },
+                      ),
+                    ),
+                  ),
+
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => context.push(
+                            '/my-projects/$projectId/timeline/new',
+                          ),
+                          style: FilledButton.styleFrom(
+                            backgroundColor:
+                                Theme.of(context).colorScheme.secondary,
+                            foregroundColor: Colors.white,
+                          ),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Nouveau Post'),
+                        ),
                       ),
                     ),
                   ),

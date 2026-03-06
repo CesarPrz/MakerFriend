@@ -12,16 +12,16 @@ import 'routing/app_router.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const MyApp());
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  MyApp({super.key});
+
+  final router = AppRouter.router();
 
   @override
   Widget build(BuildContext context) {
-    final router = AppRouter.router();
-
     return ValueListenableBuilder(
       valueListenable: ThemeController.mode,
       builder: (_, ThemeMode mode, __) {
