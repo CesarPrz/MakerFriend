@@ -48,7 +48,16 @@ class _DiscoverPageState extends State<DiscoverPage> {
     final repo = context.read<ProjectRepository>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Decouvrir')),
+      appBar: AppBar(
+        title: const Text('Decouvrir'),
+        actions: [
+          IconButton(
+            tooltip: 'Notifications',
+            onPressed: () => context.push('/settings/notifications'),
+            icon: const Icon(Icons.notifications_outlined),
+          ),
+        ],
+      ),
       body: StreamBuilder<List<Project>>(
         stream: repo.watchDiscoverProjects(limit: 100),
         builder: (context, snap) {
@@ -189,13 +198,24 @@ class _DiscoverProjectCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      _Avatar(url: ownerPhoto),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: () => context.push('/u/${project.ownerUid}'),
+                        child: _Avatar(url: ownerPhoto),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          ownerName,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                          overflow: TextOverflow.ellipsis,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () => context.push('/u/${project.ownerUid}'),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Text(
+                              ownerName,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                         ),
                       ),
                       _ProjectLikeButton(

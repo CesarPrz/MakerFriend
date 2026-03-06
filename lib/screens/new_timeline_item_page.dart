@@ -84,7 +84,6 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
         await _timelineRepo.addStep(
           projectId: widget.projectId,
           title: title,
-          body: _bodyCtrl.text,
         );
       } else {
         await _timelineRepo.addPost(
@@ -132,6 +131,7 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
                         _kind = selection.first;
                         if (_kind == NewTimelineKind.step) {
                           _images.clear();
+                          _bodyCtrl.clear();
                         }
                       });
                     },
@@ -153,16 +153,18 @@ class _NewTimelineItemPageState extends State<NewTimelineItemPage> {
                 hintText: 'Ex: Petit update du jour',
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _bodyCtrl,
-              minLines: 3,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: 'Details (optionnel)',
-                hintText: 'Ex: avancee, blocages, prochaine etape...',
+            if (_kind == NewTimelineKind.post) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _bodyCtrl,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Details (optionnel)',
+                  hintText: 'Ex: avancee, blocages, prochaine etape...',
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 16),
             if (_kind == NewTimelineKind.post) ...[
               Align(

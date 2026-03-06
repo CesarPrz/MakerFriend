@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:maker_friend/models/project_model.dart';
 import 'package:maker_friend/models/app_user_model.dart';
+import 'package:maker_friend/repositories/notification_repository.dart';
 
 class ProjectRepository {
   final FirebaseFirestore _db;
+  final NotificationRepository _notifications;
 
-  ProjectRepository({FirebaseFirestore? db})
-    : _db = db ?? FirebaseFirestore.instance;
+  ProjectRepository({FirebaseFirestore? db, NotificationRepository? notifications})
+    : _db = db ?? FirebaseFirestore.instance,
+      _notifications = notifications ?? NotificationRepository(db: db);
 
   CollectionReference<Map<String, dynamic>> get _projects =>
       _db.collection('projects');
@@ -157,14 +160,34 @@ class ProjectRepository {
   }) async {
     if (currentUid.isEmpty || projectId.isEmpty) return;
     final ref = _likedProjectRef(currentUid, projectId);
+    var created = false;
     await _db.runTransaction((tx) async {
       final snap = await tx.get(ref);
       if (snap.exists) return;
+      created = true;
       tx.set(ref, {
         'projectId': projectId,
         'createdAt': FieldValue.serverTimestamp(),
       });
     });
+
+    if (!created) return;
+
+    final meDoc = await _users.doc(currentUid).get();
+    final me = meDoc.data();
+    final projectDoc = await _projectRef(projectId).get();
+    final project = projectDoc.data();
+    final ownerUid = (project?['ownerUid'] as String?) ?? '';
+
+    await _notifications.createNotification(
+      recipientUid: ownerUid,
+      type: 'project_like',
+      actorUid: currentUid,
+      actorName: me?['displayName'] as String?,
+      actorPhotoUrl: me?['photoUrl'] as String?,
+      projectId: projectId,
+      projectTitle: project?['title'] as String?,
+    );
   }
 
   Future<void> unlikeProject({

@@ -1,5 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/models/timeline_item_model.dart';
 import 'package:maker_friend/screens/timeline_page.dart';
@@ -7,13 +7,29 @@ import 'package:maker_friend/screens/timeline_page.dart';
 class TimelineCard extends StatelessWidget {
   final String projectId;
   final TimelineItem item;
+  final String? authorNameOverride;
 
-  const TimelineCard({super.key, required this.projectId, required this.item});
+  const TimelineCard({
+    super.key,
+    required this.projectId,
+    required this.item,
+    this.authorNameOverride,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isStep = item.type == TimelineItemType.step;
-    final icon = isStep ? Icons.flag : Icons.chat_bubble_outline;
+    if (isStep) {
+      return _StepDividerTile(
+        title: item.title,
+        onTap: () {
+          context.push(
+            '/my-projects/$projectId/timeline/${item.id}',
+            extra: item.title,
+          );
+        },
+      );
+    }
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -29,11 +45,10 @@ class TimelineCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(icon),
+                  const Icon(Icons.chat_bubble_outline),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -44,7 +59,6 @@ class TimelineCard extends StatelessWidget {
                   const Icon(Icons.chevron_right),
                 ],
               ),
-
               if (item.body != null && item.body!.trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -52,19 +66,16 @@ class TimelineCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
-
               if (item.photoUrls.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 _PhotoSection(urls: item.photoUrls),
               ],
-
               const SizedBox(height: 10),
-
-              // Footer (auteur/date) - optionnel
               _MetaRow(
-                authorName: item.authorName,
+                projectId: projectId,
+                itemId: item.id,
+                authorName: authorNameOverride ?? item.authorName,
                 createdAt: item.createdAt,
-                isStep: isStep,
               ),
             ],
           ),
@@ -75,20 +86,21 @@ class TimelineCard extends StatelessWidget {
 }
 
 class _MetaRow extends StatelessWidget {
+  final String projectId;
+  final String itemId;
   final String? authorName;
   final DateTime? createdAt;
-  final bool isStep;
 
   const _MetaRow({
+    required this.projectId,
+    required this.itemId,
     required this.authorName,
     required this.createdAt,
-    required this.isStep,
   });
 
   @override
   Widget build(BuildContext context) {
     final parts = <String>[];
-
     if (authorName != null && authorName!.trim().isNotEmpty) {
       parts.add(authorName!.trim());
     }
@@ -96,7 +108,7 @@ class _MetaRow extends StatelessWidget {
       final d = createdAt!;
       final hh = d.hour.toString().padLeft(2, '0');
       final mm = d.minute.toString().padLeft(2, '0');
-      parts.add('${d.day}/${d.month} ${hh}:${mm}');
+      parts.add('${d.day}/${d.month} $hh:$mm');
     }
 
     return Row(
@@ -107,17 +119,90 @@ class _MetaRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(999),
             border: Border.all(color: Colors.black12),
           ),
-          child: Text(isStep ? 'Étape' : 'Post'),
+          child: const Text('Post'),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            parts.isEmpty ? '' : parts.join(' • '),
+            parts.isEmpty ? '' : parts.join(' - '),
             style: Theme.of(context).textTheme.bodySmall,
             overflow: TextOverflow.ellipsis,
           ),
         ),
+        const SizedBox(width: 8),
+        _CommentCount(projectId: projectId, itemId: itemId),
       ],
+    );
+  }
+}
+
+class _CommentCount extends StatelessWidget {
+  final String projectId;
+  final String itemId;
+
+  const _CommentCount({required this.projectId, required this.itemId});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('projects')
+          .doc(projectId)
+          .collection('timeline')
+          .doc(itemId)
+          .collection('comments')
+          .snapshots(),
+      builder: (context, snap) {
+        if (snap.hasError) return const SizedBox.shrink();
+        final count = snap.data?.docs.length ?? 0;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.mode_comment_outlined, size: 16),
+            const SizedBox(width: 4),
+            Text('$count', style: Theme.of(context).textTheme.bodySmall),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _StepDividerTile extends StatelessWidget {
+  final String title;
+  final VoidCallback onTap;
+
+  const _StepDividerTile({required this.title, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final orange = Theme.of(context).colorScheme.secondary;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Divider(color: orange, thickness: 1.2, endIndent: 10),
+            ),
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 4,
+                textAlign: TextAlign.center,
+                overflow: TextOverflow.fade,
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(color: orange),
+              ),
+            ),
+            Expanded(
+              child: Divider(color: orange, thickness: 1.2, indent: 10),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -132,7 +217,6 @@ class _PhotoSection extends StatelessWidget {
       return _OnePhoto(url: urls.first);
     }
 
-    // 2+ photos : mini grille horizontale scrollable
     return SizedBox(
       height: 120,
       child: ListView.separated(
@@ -228,7 +312,6 @@ class _Thumb extends StatelessWidget {
   }
 }
 
-/// Viewer simple plein écran (swipe si plusieurs)
 class PhotoViewer extends StatefulWidget {
   final List<String> urls;
   final int initialIndex;
@@ -287,3 +370,4 @@ class _PhotoViewerState extends State<PhotoViewer> {
     );
   }
 }
+

@@ -50,6 +50,17 @@ service cloud.firestore {
         allow delete: if isSelf(uid);
         allow update: if false;
       }
+
+      match /notifications/{notificationId} {
+        allow read: if isSelf(uid);
+        allow create: if signedIn()
+          && request.auth.uid == request.resource.data.actorUid
+          && request.resource.data.recipientUid == uid
+          && request.resource.data.type in ['project_like', 'new_follower', 'post_comment'];
+        allow update: if isSelf(uid)
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['readAt']);
+        allow delete: if isSelf(uid);
+      }
     }
 
     // PROJECTS

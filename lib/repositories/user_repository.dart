@@ -4,20 +4,25 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:maker_friend/models/app_user_model.dart';
+import 'package:maker_friend/repositories/notification_repository.dart';
 
 class UserRepository {
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
   final FirebaseFunctions _functions;
+  final NotificationRepository _notifications;
 
   UserRepository({
     FirebaseFirestore? db,
     FirebaseAuth? auth,
     FirebaseFunctions? functions,
+    NotificationRepository? notifications,
   }) : _db = db ?? FirebaseFirestore.instance,
        _auth = auth ?? FirebaseAuth.instance,
        _functions =
-           functions ?? FirebaseFunctions.instanceFor(region: 'us-central1');
+           functions ?? FirebaseFunctions.instanceFor(region: 'us-central1'),
+       _notifications =
+           notifications ?? NotificationRepository(db: db, auth: auth);
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _db.collection('users');
@@ -237,14 +242,28 @@ class UserRepository {
         .doc(targetUid)
         .collection('followers')
         .doc(currentUid);
+    var created = false;
     await _db.runTransaction((tx) async {
       final followingSnap = await tx.get(meFollowingRef);
       if (followingSnap.exists) return;
 
+      created = true;
       final now = FieldValue.serverTimestamp();
       tx.set(meFollowingRef, {'uid': targetUid, 'createdAt': now});
       tx.set(targetFollowerRef, {'uid': currentUid, 'createdAt': now});
     });
+
+    if (!created) return;
+
+    final meDoc = await _users.doc(currentUid).get();
+    final me = meDoc.data();
+    await _notifications.createNotification(
+      recipientUid: targetUid,
+      type: 'new_follower',
+      actorUid: currentUid,
+      actorName: me?['displayName'] as String?,
+      actorPhotoUrl: me?['photoUrl'] as String?,
+    );
   }
 
   Future<void> unfollowUser({

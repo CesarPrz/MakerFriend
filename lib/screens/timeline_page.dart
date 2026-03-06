@@ -99,8 +99,8 @@ class _TimelinePageState extends State<TimelinePage> {
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
                                   colors: [
-                                    Colors.black.withOpacity(0.05),
-                                    Colors.black.withOpacity(0.55 * t),
+                                    Colors.black.withOpacity(0.14),
+                                    Colors.black.withOpacity(0.62 * t),
                                   ],
                                 ),
                               ),

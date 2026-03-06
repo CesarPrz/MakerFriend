@@ -11,6 +11,7 @@ import 'package:maker_friend/screens/discover_page.dart';
 import 'package:maker_friend/screens/edit_profile_page.dart';
 import 'package:maker_friend/screens/feed_page.dart';
 import 'package:maker_friend/screens/main_scaffold.dart';
+import 'package:maker_friend/screens/notifications_page.dart';
 import 'package:maker_friend/screens/profile_page.dart';
 import 'package:maker_friend/screens/project_form_page.dart';
 import 'package:maker_friend/screens/search_page.dart';
@@ -187,6 +188,10 @@ class AppRouter {
                     GoRoute(
                       path: 'profile',
                       builder: (context, state) => const EditProfilePage(),
+                    ),
+                    GoRoute(
+                      path: 'notifications',
+                      builder: (context, state) => const NotificationsPage(),
                     ),
                     GoRoute(
                       path: 'theme',

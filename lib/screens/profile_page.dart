@@ -47,7 +47,9 @@ class ProfilePage extends StatelessWidget {
               isMe: isMe,
               userRepo: userRepo,
               projectRepo: projectRepo,
-              onEditProfile: isMe ? () => context.push('/settings/profile') : null,
+              onEditProfile: isMe
+                  ? () => context.push('/settings/profile')
+                  : null,
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -79,18 +81,20 @@ class ProfilePage extends StatelessWidget {
 
                   return GridView.builder(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 0.70,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 0.70,
+                        ),
                     itemCount: projects.length,
                     itemBuilder: (context, i) {
                       final p = projects[i];
                       return ProjectCard(
                         project: p,
-                        onTap: () => context.push('/my-projects/${p.id}/timeline'),
+                        onTap: () =>
+                            context.push('/my-projects/${p.id}/timeline'),
                       );
                     },
                   );
@@ -196,7 +200,9 @@ class _ProfileHeader extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    tileColor: Theme.of(context).colorScheme.surfaceContainerLow,
+                    tileColor: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerLow,
                     leading: p.coverUrl != null && p.coverUrl!.isNotEmpty
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(8),
@@ -311,8 +317,7 @@ class _ProfileHeader extends StatelessWidget {
                                 (u.photoUrl != null && u.photoUrl!.isNotEmpty)
                                 ? NetworkImage(u.photoUrl!)
                                 : null,
-                            child:
-                                (u.photoUrl == null || u.photoUrl!.isEmpty)
+                            child: (u.photoUrl == null || u.photoUrl!.isEmpty)
                                 ? const Icon(Icons.person)
                                 : null,
                           ),
@@ -341,149 +346,163 @@ class _ProfileHeader extends StatelessWidget {
       builder: (context, snap) {
         final data = snap.data?.data();
         final displayName =
-            (data?['displayName'] as String?) ?? FirebaseAuth.instance.currentUser?.displayName ?? 'Maker';
+            (data?['displayName'] as String?) ??
+            FirebaseAuth.instance.currentUser?.displayName ??
+            'Maker';
 
-        final photoUrl = (data?['photoUrl'] as String?) ?? FirebaseAuth.instance.currentUser?.photoURL;
+        final photoUrl =
+            (data?['photoUrl'] as String?) ??
+            FirebaseAuth.instance.currentUser?.photoURL;
 
         final projectsCount = null;
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: const EdgeInsets.fromLTRB(22, 12, 16, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _ProfileAvatar(photoUrl: photoUrl),
-                  const SizedBox(width: 16),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: SizedBox(
+                      width: 106,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _ProfileAvatar(photoUrl: photoUrl),
+                          const SizedBox(height: 8),
+                          Text(
+                            displayName,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 18),
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: SizedBox(
-                          width: 180,
-                          child: Column(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Column(
+                        children: [
+                          Row(
                             children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: StreamBuilder<int>(
-                                stream: _watchFollowingCount(),
-                                builder: (context, countSnap) {
-                                  return Center(
-                                    child: InkWell(
-                                      onTap: () => _openUsersSheet(
-                                        context,
-                                        title: 'Suivis',
-                                        stream: userRepo.watchFollowingUsers(
-                                          uid,
+                              Expanded(
+                                child: StreamBuilder<int>(
+                                  stream: _watchFollowingCount(),
+                                  builder: (context, countSnap) {
+                                    return Center(
+                                      child: InkWell(
+                                        onTap: () => _openUsersSheet(
+                                          context,
+                                          title: 'Suivis',
+                                          stream: userRepo.watchFollowingUsers(
+                                            uid,
+                                          ),
                                         ),
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 4,
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 4,
+                                          ),
+                                          child: _StatTile(
+                                            label: 'Suivis',
+                                            value: countSnap.data ?? 0,
+                                          ),
                                         ),
-                                        child: _StatTile(
-                                          label: 'Suivis',
-                                          value: countSnap.data ?? 0,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            Expanded(
-                              child: StreamBuilder<int>(
-                                stream: _watchFollowersCount(),
-                                builder: (context, countSnap) {
-                                  if (countSnap.hasError) {
-                                    return const Center(
-                                      child: _StatTile(
-                                        label: 'Followers',
-                                        value: 0,
                                       ),
                                     );
-                                  }
-                                  return Center(
-                                    child: InkWell(
-                                      onTap: () => _openUsersSheet(
-                                        context,
-                                        title: 'Followers',
-                                        stream: userRepo.watchFollowersUsers(
-                                          uid,
-                                        ),
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 4,
-                                        ),
-                                        child: _StatTile(
-                                          label: 'Followers',
-                                          value: countSnap.data ?? 0,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Center(
-                                child: _StatTile(
-                                  label: 'Projets',
-                                  value: projectsCount,
+                                  },
                                 ),
                               ),
-                            ),
-                            Expanded(
-                              child: StreamBuilder<int>(
-                                stream: _watchLikedProjectsCount(),
-                                builder: (context, countSnap) {
-                                  final count = countSnap.data ?? 0;
-                                  return Center(
-                                    child: InkWell(
-                                      onTap: () =>
-                                          _openLikedProjectsSheet(context),
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 4,
-                                        ),
+                              Expanded(
+                                child: StreamBuilder<int>(
+                                  stream: _watchFollowersCount(),
+                                  builder: (context, countSnap) {
+                                    if (countSnap.hasError) {
+                                      return const Center(
                                         child: _StatTile(
-                                          label: 'Likes',
-                                          value: count,
+                                          label: 'Followers',
+                                          value: 0,
+                                        ),
+                                      );
+                                    }
+                                    return Center(
+                                      child: InkWell(
+                                        onTap: () => _openUsersSheet(
+                                          context,
+                                          title: 'Followers',
+                                          stream: userRepo.watchFollowersUsers(
+                                            uid,
+                                          ),
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 4,
+                                          ),
+                                          child: _StatTile(
+                                            label: 'Followers',
+                                            value: countSnap.data ?? 0,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  );
-                                },
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
                             ],
                           ),
-                        ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Center(
+                                  child: _StatTile(
+                                    label: 'Projets',
+                                    value: projectsCount,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: StreamBuilder<int>(
+                                  stream: _watchLikedProjectsCount(),
+                                  builder: (context, countSnap) {
+                                    final count = countSnap.data ?? 0;
+                                    return Center(
+                                      child: InkWell(
+                                        onTap: () =>
+                                            _openLikedProjectsSheet(context),
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 4,
+                                          ),
+                                          child: _StatTile(
+                                            label: 'Likes',
+                                            value: count,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(displayName, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
               if (isMe)
                 SizedBox(
@@ -535,15 +554,21 @@ class _FollowButtonState extends State<_FollowButton> {
     setState(() => _busy = true);
     try {
       if (isFollowing) {
-        await widget.userRepo.unfollowUser(currentUid: me, targetUid: widget.targetUid);
+        await widget.userRepo.unfollowUser(
+          currentUid: me,
+          targetUid: widget.targetUid,
+        );
       } else {
-        await widget.userRepo.followUser(currentUid: me, targetUid: widget.targetUid);
+        await widget.userRepo.followUser(
+          currentUid: me,
+          targetUid: widget.targetUid,
+        );
       }
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur follow: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erreur follow: $e')));
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -569,10 +594,7 @@ class _FollowButtonState extends State<_FollowButton> {
           final isFollowing = snap.data ?? false;
           final onPressed = _busy
               ? null
-              : () => _toggleFollow(
-                    context: context,
-                    isFollowing: isFollowing,
-                  );
+              : () => _toggleFollow(context: context, isFollowing: isFollowing);
 
           if (isFollowing) {
             return OutlinedButton.icon(
@@ -616,8 +638,12 @@ class _ProfileAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: 38,
       backgroundColor: bg,
-      backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
-      child: (photoUrl == null || photoUrl!.isEmpty) ? const Icon(Icons.person, size: 36) : null,
+      backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty)
+          ? NetworkImage(photoUrl!)
+          : null,
+      child: (photoUrl == null || photoUrl!.isEmpty)
+          ? const Icon(Icons.person, size: 36)
+          : null,
     );
   }
 }

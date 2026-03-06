@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:maker_friend/models/comment_model.dart';
 import 'package:maker_friend/models/timeline_item_model.dart';
+import 'package:maker_friend/repositories/notification_repository.dart';
 
 class FollowingFeedItem {
   final String projectId;
@@ -22,10 +23,17 @@ class FollowingFeedItem {
 class TimelineRepository {
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
+  final NotificationRepository _notifications;
 
-  TimelineRepository({FirebaseFirestore? db, FirebaseAuth? auth})
+  TimelineRepository({
+    FirebaseFirestore? db,
+    FirebaseAuth? auth,
+    NotificationRepository? notifications,
+  })
     : _db = db ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+      _auth = auth ?? FirebaseAuth.instance,
+      _notifications =
+          notifications ?? NotificationRepository(db: db, auth: auth);
 
   CollectionReference<Map<String, dynamic>> _timelineCol(String projectId) =>
       _db.collection('projects').doc(projectId).collection('timeline');
@@ -299,6 +307,9 @@ class TimelineRepository {
     final text = body.trim();
     if (text.isEmpty) return;
 
+    final itemDoc = await _timelineCol(projectId).doc(itemId).get();
+    final itemData = itemDoc.data();
+
     await _commentsCol(projectId, itemId).add({
       'body': text,
       'createdAt': FieldValue.serverTimestamp(),
@@ -306,5 +317,24 @@ class TimelineRepository {
       'authorName': user.displayName,
       'authorPhotoUrl': user.photoURL,
     });
+
+    if (itemData == null) return;
+    final recipientUid = (itemData['authorUid'] as String?) ?? '';
+    final itemTitle = itemData['title'] as String?;
+
+    final projectDoc = await _db.collection('projects').doc(projectId).get();
+    final projectData = projectDoc.data();
+
+    await _notifications.createNotification(
+      recipientUid: recipientUid,
+      type: 'post_comment',
+      actorUid: user.uid,
+      actorName: user.displayName,
+      actorPhotoUrl: user.photoURL,
+      projectId: projectId,
+      projectTitle: projectData?['title'] as String?,
+      itemId: itemId,
+      itemTitle: itemTitle,
+    );
   }
 }
