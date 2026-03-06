@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/models/timeline_item_model.dart';
 import 'package:maker_friend/screens/timeline_page.dart';
+import 'package:maker_friend/utils/relative_time.dart';
 
 class TimelineCard extends StatelessWidget {
   final String projectId;
@@ -105,10 +106,7 @@ class _MetaRow extends StatelessWidget {
       parts.add(authorName!.trim());
     }
     if (createdAt != null) {
-      final d = createdAt!;
-      final hh = d.hour.toString().padLeft(2, '0');
-      final mm = d.minute.toString().padLeft(2, '0');
-      parts.add('${d.day}/${d.month} $hh:$mm');
+      parts.add(formatRelativeTime(createdAt));
     }
 
     return Row(

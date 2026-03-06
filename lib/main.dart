@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:maker_friend/repositories/project_repository.dart';
 import 'package:maker_friend/repositories/timeline_repository.dart';
 import 'package:maker_friend/repositories/user_repository.dart';
+import 'package:maker_friend/services/push_notification_service.dart';
 import 'package:maker_friend/themes/app_theme.dart';
 import 'package:maker_friend/themes/theme_controller.dart';
 import 'firebase_options.dart';
@@ -12,6 +13,7 @@ import 'routing/app_router.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await PushNotificationService().init();
   runApp(MyApp());
 }
 

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:maker_friend/widgets/notification_bell_button.dart';
 
 import '../models/project_model.dart';
 import '../repositories/project_repository.dart';
@@ -50,13 +51,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Decouvrir'),
-        actions: [
-          IconButton(
-            tooltip: 'Notifications',
-            onPressed: () => context.push('/settings/notifications'),
-            icon: const Icon(Icons.notifications_outlined),
-          ),
-        ],
+        actions: const [NotificationBellButton()],
       ),
       body: StreamBuilder<List<Project>>(
         stream: repo.watchDiscoverProjects(limit: 100),

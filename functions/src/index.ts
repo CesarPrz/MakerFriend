@@ -2,6 +2,7 @@ import { onDocumentCreated, onDocumentDeleted } from 'firebase-functions/v2/fire
 import { logger } from 'firebase-functions';
 import { initializeApp } from 'firebase-admin/app';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { getMessaging } from 'firebase-admin/messaging';
 
 initializeApp();
 const db = getFirestore();
@@ -141,5 +142,95 @@ export const onProjectLikedDeleted = onDocumentDeleted(
     });
 
     logger.info('Project unliked', { uid, projectId });
+  },
+);
+
+/**
+ * Trigger: users/{uid}/notifications/{notificationId} CREATED
+ * - envoie une push FCM au destinataire (si tokens disponibles)
+ */
+export const onNotificationCreated = onDocumentCreated(
+  'users/{uid}/notifications/{notificationId}',
+  async (event) => {
+    const { uid, notificationId } = event.params;
+    if (!uid || !notificationId) return;
+
+    const data = event.data?.data();
+    if (!data) return;
+
+    const userDoc = await db.collection('users').doc(uid).get();
+    const userData = userDoc.data() ?? {};
+    const tokens = (userData.fcmTokens as string[] | undefined) ?? [];
+    const cleanTokens = tokens.filter((t) => typeof t === 'string' && t.length > 0);
+    if (cleanTokens.length === 0) return;
+
+    const actorName = (data.actorName as string | undefined) ?? 'Quelqu\'un';
+    const type = (data.type as string | undefined) ?? 'post_comment';
+
+    let title = 'Nouvelle notification';
+    let body = 'Tu as une nouvelle notification.';
+
+    if (type === 'new_follower') {
+      title = 'Nouveau follower';
+      body = `${actorName} te suit maintenant.`;
+    } else if (type === 'project_like') {
+      const projectTitle = (data.projectTitle as string | undefined) ?? '';
+      title = 'Nouveau like';
+      body = projectTitle
+        ? `${actorName} a like ton projet "${projectTitle}".`
+        : `${actorName} a like ton projet.`;
+    } else if (type === 'post_comment') {
+      const itemTitle = (data.itemTitle as string | undefined) ?? '';
+      title = 'Nouveau commentaire';
+      body = itemTitle
+        ? `${actorName} a commente ton post "${itemTitle}".`
+        : `${actorName} a commente ton post.`;
+    }
+
+    const response = await getMessaging().sendEachForMulticast({
+      tokens: cleanTokens,
+      notification: { title, body },
+      data: {
+        type,
+        projectId: (data.projectId as string | undefined) ?? '',
+        itemId: (data.itemId as string | undefined) ?? '',
+      },
+      android: {
+        priority: 'high',
+      },
+      apns: {
+        headers: {
+          'apns-priority': '10',
+        },
+      },
+    });
+
+    if (response.failureCount > 0) {
+      const invalidTokens: string[] = [];
+      response.responses.forEach((r, idx) => {
+        if (!r.success) {
+          const code = r.error?.code ?? '';
+          if (
+            code.includes('registration-token-not-registered') ||
+            code.includes('invalid-registration-token')
+          ) {
+            invalidTokens.push(cleanTokens[idx]);
+          }
+        }
+      });
+
+      if (invalidTokens.length > 0) {
+        await db.collection('users').doc(uid).set({
+          fcmTokens: FieldValue.arrayRemove(...invalidTokens),
+        }, { merge: true });
+      }
+    }
+
+    logger.info('Notification push sent', {
+      uid,
+      notificationId,
+      sent: response.successCount,
+      failed: response.failureCount,
+    });
   },
 );

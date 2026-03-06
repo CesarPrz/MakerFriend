@@ -2,18 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/models/notification_model.dart';
 import 'package:maker_friend/repositories/notification_repository.dart';
+import 'package:maker_friend/utils/relative_time.dart';
 
-class NotificationsPage extends StatelessWidget {
+class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final repo = NotificationRepository();
+  State<NotificationsPage> createState() => _NotificationsPageState();
+}
 
+class _NotificationsPageState extends State<NotificationsPage> {
+  final NotificationRepository _repo = NotificationRepository();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _repo.markAllAsRead();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Notifications')),
       body: StreamBuilder<List<AppNotification>>(
-        stream: repo.watchMyNotifications(),
+        stream: _repo.watchMyNotifications(),
         builder: (context, snap) {
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -32,7 +46,7 @@ class NotificationsPage extends StatelessWidget {
               return _NotificationTile(
                 notification: n,
                 onTap: () async {
-                  await repo.markAsRead(n.id);
+                  await _repo.markAsRead(n.id);
                   if (!context.mounted) return;
                   _openNotification(context, n);
                 },
@@ -128,9 +142,6 @@ class _NotificationTile extends StatelessWidget {
   }
 
   String _dateLabel(DateTime? dt) {
-    if (dt == null) return 'A l\'instant';
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
-    return '${dt.day}/${dt.month}/${dt.year} $hh:$mm';
+    return formatRelativeTime(dt);
   }
 }

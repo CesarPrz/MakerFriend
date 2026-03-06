@@ -43,6 +43,34 @@ class NotificationRepository {
     }, SetOptions(merge: true));
   }
 
+  Future<void> markAllAsRead() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return;
+
+    final unreadSnap = await _notificationsCol(uid)
+        .where('readAt', isNull: true)
+        .get();
+    if (unreadSnap.docs.isEmpty) return;
+
+    WriteBatch batch = _db.batch();
+    var ops = 0;
+    for (final doc in unreadSnap.docs) {
+      batch.set(doc.reference, {
+        'readAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      ops++;
+
+      if (ops == 450) {
+        await batch.commit();
+        batch = _db.batch();
+        ops = 0;
+      }
+    }
+    if (ops > 0) {
+      await batch.commit();
+    }
+  }
+
   Future<void> createNotification({
     required String recipientUid,
     required String type,

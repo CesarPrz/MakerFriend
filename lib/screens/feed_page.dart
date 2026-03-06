@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:maker_friend/widgets/notification_bell_button.dart';
 
 import '../models/timeline_item_model.dart';
 import '../repositories/timeline_repository.dart';
@@ -52,13 +53,7 @@ class FeedPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mon fil'),
-        actions: [
-          IconButton(
-            tooltip: 'Notifications',
-            onPressed: () => context.push('/settings/notifications'),
-            icon: const Icon(Icons.notifications_outlined),
-          ),
-        ],
+        actions: const [NotificationBellButton()],
       ),
       body: StreamBuilder<List<FollowingFeedItem>>(
         stream: repo.watchFollowingFeed(me.uid),

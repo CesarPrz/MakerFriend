@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:maker_friend/models/comment_model.dart';
 import 'package:maker_friend/models/timeline_item_model.dart';
 import 'package:maker_friend/screens/timeline_page.dart';
+import 'package:maker_friend/utils/relative_time.dart';
 import 'package:maker_friend/widgets/timeline_card.dart';
 
 import '../repositories/timeline_repository.dart';
@@ -241,10 +242,7 @@ class _PostFullCard extends StatelessWidget {
       parts.add(item.authorName!.trim());
     }
     if (item.createdAt != null) {
-      final d = item.createdAt!;
-      final hh = d.hour.toString().padLeft(2, '0');
-      final mm = d.minute.toString().padLeft(2, '0');
-      parts.add('${d.day}/${d.month} $hh:$mm');
+      parts.add(formatRelativeTime(item.createdAt));
     }
     return parts.join(' - ');
   }
@@ -304,8 +302,6 @@ class _CommentTile extends StatelessWidget {
   }
 
   String _dateLabel(DateTime d) {
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '${d.day}/${d.month}/${d.year} $hh:$mm';
+    return formatRelativeTime(d);
   }
 }
