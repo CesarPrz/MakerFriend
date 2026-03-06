@@ -43,9 +43,7 @@ class FeedPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final me = FirebaseAuth.instance.currentUser;
     if (me == null) {
-      return const Scaffold(
-        body: Center(child: Text("Tu n'es pas connecte.")),
-      );
+      return const Scaffold(body: Center(child: Text("Tu n'es pas connecte.")));
     }
 
     final repo = context.read<TimelineRepository>();
@@ -159,7 +157,10 @@ class _FeedGroupCard extends StatelessWidget {
                       child:
                           (group.projectCoverUrl != null &&
                               group.projectCoverUrl!.isNotEmpty)
-                          ? Image.network(group.projectCoverUrl!, fit: BoxFit.cover)
+                          ? Image.network(
+                              group.projectCoverUrl!,
+                              fit: BoxFit.cover,
+                            )
                           : Container(
                               color: Theme.of(
                                 context,
@@ -173,8 +174,8 @@ class _FeedGroupCard extends StatelessWidget {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Colors.black.withOpacity(0.20),
-                              Colors.black.withOpacity(0.55),
+                              Colors.black.withOpacity(0.5),
+                              Colors.black.withOpacity(0.8),
                             ],
                           ),
                         ),
@@ -194,8 +195,7 @@ class _FeedGroupCard extends StatelessWidget {
                                   (photoUrl != null && photoUrl.isNotEmpty)
                                   ? NetworkImage(photoUrl)
                                   : null,
-                              child:
-                                  (photoUrl == null || photoUrl.isEmpty)
+                              child: (photoUrl == null || photoUrl.isEmpty)
                                   ? const Icon(Icons.person, size: 18)
                                   : null,
                             ),
@@ -213,7 +213,9 @@ class _FeedGroupCard extends StatelessWidget {
                                           context.push('/u/${group.authorUid}'),
                                       child: Text(
                                         displayName,
-                                        style: Theme.of(context).textTheme.bodyMedium
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
                                             ?.copyWith(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w700,
@@ -222,7 +224,9 @@ class _FeedGroupCard extends StatelessWidget {
                                     ),
                                     Text(
                                       ' a ajoute $updatesCount $label au projet',
-                                      style: Theme.of(context).textTheme.bodyMedium
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
                                           ?.copyWith(color: Colors.white),
                                     ),
                                   ],
@@ -294,12 +298,11 @@ class _InnerFeedItem extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(2),
-          child: card,
-        ),
+        child: Padding(padding: const EdgeInsets.all(2), child: card),
       ),
     );
   }

@@ -8,8 +8,8 @@ class MainScaffold extends StatelessWidget {
   void _onTap(int index) {
     navigationShell.goBranch(
       index,
-      // If user taps current tab, go back to that branch root.
-      initialLocation: index == navigationShell.currentIndex,
+      // Always reset to branch root when tapping a tab.
+      initialLocation: true,
     );
   }
 

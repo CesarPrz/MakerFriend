@@ -178,27 +178,35 @@ class _StepDividerTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-        child: Row(
-          children: [
-            Expanded(
-              child: Divider(color: orange, thickness: 1.2, endIndent: 10),
-            ),
-            Flexible(
-              child: Text(
-                title,
-                maxLines: 4,
-                textAlign: TextAlign.center,
-                overflow: TextOverflow.fade,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: orange),
-              ),
-            ),
-            Expanded(
-              child: Divider(color: orange, thickness: 1.2, indent: 10),
-            ),
-          ],
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return Row(
+              children: [
+                Expanded(
+                  child: Divider(color: orange, thickness: 1.2),
+                ),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.5),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      title,
+                      maxLines: 3,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelLarge?.copyWith(color: orange),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Divider(color: orange, thickness: 1.2),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
