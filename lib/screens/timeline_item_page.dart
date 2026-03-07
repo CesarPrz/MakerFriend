@@ -171,7 +171,6 @@ class _PostFullCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(isStep ? Icons.flag : Icons.chat_bubble_outline),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(

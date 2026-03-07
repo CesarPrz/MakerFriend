@@ -290,6 +290,42 @@ class TimelineRepository {
     return doc.id;
   }
 
+  Future<void> updatePost({
+    required String projectId,
+    required String itemId,
+    required String title,
+    String? body,
+  }) async {
+    final trimmedTitle = title.trim();
+    if (trimmedTitle.isEmpty) {
+      throw ArgumentError('title must not be empty');
+    }
+    final trimmedBody = (body ?? '').trim();
+
+    await _timelineCol(projectId).doc(itemId).update({
+      'title': trimmedTitle,
+      'body': trimmedBody.isEmpty ? null : trimmedBody,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    await _touchProjectTimeline(projectId);
+  }
+
+  Future<void> deleteTimelineItem({
+    required String projectId,
+    required String itemId,
+  }) async {
+    final comments = await _commentsCol(projectId, itemId).get();
+    final batch = _db.batch();
+
+    for (final doc in comments.docs) {
+      batch.delete(doc.reference);
+    }
+    batch.delete(_timelineCol(projectId).doc(itemId));
+
+    await batch.commit();
+    await _touchProjectTimeline(projectId);
+  }
+
   Stream<List<CommentModel>> watchComments(String projectId, String itemId) {
     return _commentsCol(projectId, itemId)
         .orderBy('createdAt', descending: false) // lecture “conversation”

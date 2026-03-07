@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/models/timeline_item_model.dart';
+import 'package:maker_friend/repositories/timeline_repository.dart';
 import 'package:maker_friend/screens/timeline_page.dart';
 import 'package:maker_friend/utils/relative_time.dart';
 
@@ -16,6 +18,123 @@ class TimelineCard extends StatelessWidget {
     required this.item,
     this.authorNameOverride,
   });
+
+  bool get _canManagePost {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return false;
+    if (item.type != TimelineItemType.post) return false;
+    return uid == item.authorUid;
+  }
+
+  Future<void> _showActionsFromLongPress(BuildContext context) async {
+    if (!_canManagePost) return;
+
+    final selected = await showModalBottomSheet<_PostAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Modifier'),
+                onTap: () => Navigator.of(sheetContext).pop(_PostAction.edit),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text('Supprimer'),
+                textColor: Colors.red,
+                onTap: () => Navigator.of(sheetContext).pop(_PostAction.delete),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected == null || !context.mounted) return;
+    await _handlePostAction(context, selected);
+  }
+
+  Future<void> _handlePostAction(
+    BuildContext context,
+    _PostAction action,
+  ) async {
+    final repo = TimelineRepository();
+
+    try {
+      if (action == _PostAction.edit) {
+        final edited = await _showEditDialog(context);
+        if (edited == null || !context.mounted) return;
+
+        final title = edited.title.trim();
+        final body = edited.body.trim();
+        if (title.isEmpty) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Le titre est requis.')));
+          return;
+        }
+        if (title == item.title.trim() && body == (item.body ?? '').trim()) {
+          return;
+        }
+
+        await repo.updatePost(
+          projectId: projectId,
+          itemId: item.id,
+          title: title,
+          body: body,
+        );
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Post modifie.')));
+        return;
+      }
+
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Supprimer ce post ?'),
+          content: const Text('Cette action est irreversible.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+
+      await repo.deleteTimelineItem(projectId: projectId, itemId: item.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Post supprime.')));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Operation impossible.')));
+    }
+  }
+
+  Future<_PostEdition?> _showEditDialog(BuildContext context) async {
+    return showDialog<_PostEdition>(
+      context: context,
+      builder: (_) => _EditPostDialog(
+        initialTitle: item.title,
+        initialBody: item.body ?? '',
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +160,9 @@ class TimelineCard extends StatelessWidget {
             extra: item.title,
           );
         },
+        onLongPress: _canManagePost
+            ? () => _showActionsFromLongPress(context)
+            : null,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -49,14 +171,32 @@ class TimelineCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.chat_bubble_outline),
-                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       item.title,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
+                  if (_canManagePost)
+                    PopupMenuButton<_PostAction>(
+                      tooltip: 'Actions',
+                      padding: EdgeInsets.zero,
+                      onSelected: (value) => _handlePostAction(context, value),
+                      itemBuilder: (context) => const [
+                        PopupMenuItem(
+                          value: _PostAction.edit,
+                          child: Text('Modifier'),
+                        ),
+                        PopupMenuItem(
+                          value: _PostAction.delete,
+                          child: Text('Supprimer'),
+                        ),
+                      ],
+                      child: const Padding(
+                        padding: EdgeInsets.only(top: 1),
+                        child: Icon(Icons.more_vert, size: 20),
+                      ),
+                    ),
                   const Icon(Icons.chevron_right),
                 ],
               ),
@@ -82,6 +222,86 @@ class TimelineCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+enum _PostAction { edit, delete }
+
+class _PostEdition {
+  final String title;
+  final String body;
+
+  const _PostEdition({required this.title, required this.body});
+}
+
+class _EditPostDialog extends StatefulWidget {
+  final String initialTitle;
+  final String initialBody;
+
+  const _EditPostDialog({
+    required this.initialTitle,
+    required this.initialBody,
+  });
+
+  @override
+  State<_EditPostDialog> createState() => _EditPostDialogState();
+}
+
+class _EditPostDialogState extends State<_EditPostDialog> {
+  late final TextEditingController _titleCtrl;
+  late final TextEditingController _bodyCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.initialTitle);
+    _bodyCtrl = TextEditingController(text: widget.initialBody);
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Modifier le post'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _titleCtrl,
+              maxLength: 90,
+              decoration: const InputDecoration(labelText: 'Titre'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _bodyCtrl,
+              minLines: 3,
+              maxLines: 8,
+              decoration: const InputDecoration(labelText: 'Contenu'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Annuler'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(
+            context,
+          ).pop(_PostEdition(title: _titleCtrl.text, body: _bodyCtrl.text)),
+          child: const Text('Enregistrer'),
+        ),
+      ],
     );
   }
 }
@@ -183,11 +403,11 @@ class _StepDividerTile extends StatelessWidget {
           builder: (context, constraints) {
             return Row(
               children: [
-                Expanded(
-                  child: Divider(color: orange, thickness: 1.2),
-                ),
+                Expanded(child: Divider(color: orange, thickness: 1.2)),
                 ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.5),
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth * 0.5,
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
@@ -201,9 +421,7 @@ class _StepDividerTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                Expanded(
-                  child: Divider(color: orange, thickness: 1.2),
-                ),
+                Expanded(child: Divider(color: orange, thickness: 1.2)),
               ],
             );
           },
@@ -376,4 +594,3 @@ class _PhotoViewerState extends State<PhotoViewer> {
     );
   }
 }
-

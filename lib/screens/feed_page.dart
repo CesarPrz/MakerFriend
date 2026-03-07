@@ -77,6 +77,75 @@ class _FeedGroupCard extends StatelessWidget {
   final FeedGroup group;
 
   const _FeedGroupCard({required this.group});
+  static final Map<String, Stream<_ProjectLikesPreview>> _likesStreamCache = {};
+
+  Stream<_ProjectLikesPreview> _likesStreamForProject(String projectId) {
+    return _likesStreamCache.putIfAbsent(
+      projectId,
+      () => _watchProjectLikesPreview(projectId),
+    );
+  }
+
+  Stream<_ProjectLikesPreview> _watchProjectLikesPreview(String projectId) {
+    return FirebaseFirestore.instance
+        .collectionGroup('likedProjects')
+        .where('projectId', isEqualTo: projectId)
+        .snapshots()
+        .asyncMap((snap) async {
+          final uniqueUids = <String>{};
+          for (final doc in snap.docs) {
+            final uid = doc.reference.parent.parent?.id;
+            if (uid != null && uid.isNotEmpty) {
+              uniqueUids.add(uid);
+            }
+          }
+
+          if (uniqueUids.isEmpty) {
+            return const _ProjectLikesPreview(totalCount: 0, users: []);
+          }
+
+          final previewUids = uniqueUids.take(4).toList(growable: false);
+          final userDocs = await Future.wait(
+            previewUids.map(
+              (uid) =>
+                  FirebaseFirestore.instance.collection('users').doc(uid).get(),
+            ),
+          );
+
+          final users = <_LikerUser>[];
+          for (final doc in userDocs) {
+            final data = doc.data();
+            final name = (data?['displayName'] as String?)?.trim();
+            final photo = (data?['photoUrl'] as String?)?.trim();
+            users.add(
+              _LikerUser(
+                name: (name == null || name.isEmpty) ? 'Maker' : name,
+                photoUrl: (photo == null || photo.isEmpty) ? null : photo,
+              ),
+            );
+          }
+
+          return _ProjectLikesPreview(
+            totalCount: uniqueUids.length,
+            users: users,
+          );
+        });
+  }
+
+  String _likesLine(_ProjectLikesPreview preview) {
+    if (preview.users.isEmpty || preview.totalCount == 0) {
+      return '';
+    }
+    final first = preview.users.first.name;
+    final others = preview.totalCount - 1;
+    if (others <= 0) {
+      return '$first a aime le projet';
+    }
+    if (others == 1) {
+      return '$first et 1 autre ont aime le projet';
+    }
+    return '$first et $others autres ont aime le projet';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -143,64 +212,112 @@ class _FeedGroupCard extends StatelessWidget {
                     ),
                     Padding(
                       padding: const EdgeInsets.all(10),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          InkWell(
-                            borderRadius: BorderRadius.circular(999),
-                            onTap: () => context.push('/u/${group.authorUid}'),
-                            child: CircleAvatar(
-                              radius: 18,
-                              backgroundImage:
-                                  (photoUrl != null && photoUrl.isNotEmpty)
-                                  ? NetworkImage(photoUrl)
-                                  : null,
-                              child: (photoUrl == null || photoUrl.isEmpty)
-                                  ? const Icon(Icons.person, size: 18)
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
+                      child: StreamBuilder<_ProjectLikesPreview>(
+                        stream: _likesStreamForProject(group.projectId),
+                        builder: (context, likesSnap) {
+                          final likes = likesSnap.data;
+                          final hasLikes = (likes?.totalCount ?? 0) > 0;
+
+                          if (hasLikes && likes != null) {
+                            return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                Row(
                                   children: [
-                                    InkWell(
-                                      onTap: () =>
-                                          context.push('/u/${group.authorUid}'),
+                                    _StackedLikeAvatars(users: likes.users),
+                                    const SizedBox(width: 10),
+                                    Expanded(
                                       child: Text(
-                                        displayName,
+                                        _likesLine(likes),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodyMedium
                                             ?.copyWith(
                                               color: Colors.white,
-                                              fontWeight: FontWeight.w700,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                       ),
-                                    ),
-                                    Text(
-                                      ' a ajoute $updatesCount $label au projet',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(color: Colors.white),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   group.projectTitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.titleSmall
                                       ?.copyWith(color: Colors.white),
                                 ),
                               ],
-                            ),
-                          ),
-                        ],
+                            );
+                          }
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              InkWell(
+                                borderRadius: BorderRadius.circular(999),
+                                onTap: () => context.push('/u/${group.authorUid}'),
+                                child: CircleAvatar(
+                                  radius: 18,
+                                  backgroundImage:
+                                      (photoUrl != null && photoUrl.isNotEmpty)
+                                      ? NetworkImage(photoUrl)
+                                      : null,
+                                  child: (photoUrl == null || photoUrl.isEmpty)
+                                      ? const Icon(Icons.person, size: 18)
+                                      : null,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Wrap(
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        InkWell(
+                                          onTap: () => context.push(
+                                            '/u/${group.authorUid}',
+                                          ),
+                                          child: Text(
+                                            displayName,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                          ),
+                                        ),
+                                        Text(
+                                          ' a ajoute $updatesCount $label au projet',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium
+                                              ?.copyWith(color: Colors.white),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      group.projectTitle,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -222,6 +339,72 @@ class _FeedGroupCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _ProjectLikesPreview {
+  final int totalCount;
+  final List<_LikerUser> users;
+
+  const _ProjectLikesPreview({required this.totalCount, required this.users});
+}
+
+class _LikerUser {
+  final String name;
+  final String? photoUrl;
+
+  const _LikerUser({required this.name, this.photoUrl});
+}
+
+class _StackedLikeAvatars extends StatelessWidget {
+  final List<_LikerUser> users;
+
+  const _StackedLikeAvatars({required this.users});
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = users.take(4).toList(growable: false);
+    if (shown.isEmpty) return const SizedBox.shrink();
+
+    const avatarSize = 26.0;
+    const overlap = 16.0;
+    final width = avatarSize + (shown.length - 1) * overlap;
+
+    return SizedBox(
+      width: width,
+      height: avatarSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(
+              left: i * overlap,
+              child: Container(
+                width: avatarSize,
+                height: avatarSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.6),
+                ),
+                child: CircleAvatar(
+                  radius: avatarSize / 2,
+                  backgroundImage: shown[i].photoUrl != null
+                      ? NetworkImage(shown[i].photoUrl!)
+                      : null,
+                  child: shown[i].photoUrl == null
+                      ? Text(
+                          shown[i].name.isEmpty
+                              ? '?'
+                              : shown[i].name[0].toUpperCase(),
+                          style: const TextStyle(fontSize: 11),
+                        )
+                      : null,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
