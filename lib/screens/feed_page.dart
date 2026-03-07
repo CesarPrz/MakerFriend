@@ -105,7 +105,7 @@ class _FeedGroupCard extends StatelessWidget {
         return Card(
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => context.push('/projects/${group.projectId}'),
+            onTap: () => context.push('/my-projects/${group.projectId}/timeline'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
