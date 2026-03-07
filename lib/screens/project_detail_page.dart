@@ -143,6 +143,12 @@ class ProjectDetailPage extends StatelessWidget {
               if (owner) ...[
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
+                  onPressed: () => context.push('/my-projects/${project.id}/edit'),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Editer le projet'),
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
                   onPressed: () => _deleteProject(
                     context,
                     repo: repo,

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/models/project_model.dart';
@@ -39,6 +40,8 @@ class _TimelinePageState extends State<TimelinePage> {
               body: Center(child: CircularProgressIndicator()),
             );
           }
+          final meUid = FirebaseAuth.instance.currentUser?.uid;
+          final isOwner = meUid != null && meUid == project.ownerUid;
 
           return StreamBuilder<List<TimelineItem>>(
             stream: _timelineRepo.watchTimeline(projectId),
@@ -64,6 +67,13 @@ class _TimelinePageState extends State<TimelinePage> {
 
                     // ❌ PAS DE title: ICI
                     actions: [
+                      if (isOwner)
+                        IconButton(
+                          tooltip: 'Editer',
+                          onPressed: () =>
+                              context.push('/my-projects/$projectId/edit'),
+                          icon: const Icon(Icons.edit_outlined),
+                        ),
                       IconButton(
                         tooltip: 'Projet',
                         onPressed: () => context.push('/projects/$projectId'),
@@ -126,6 +136,22 @@ class _TimelinePageState extends State<TimelinePage> {
 
                             // Titre toolbar : apparaît seulement quand collapsed
                             Positioned(
+                              right: 16,
+                              bottom: 16,
+                              child: IgnorePointer(
+                                ignoring: coverTextOpacity == 0,
+                                child: AnimatedOpacity(
+                                  opacity: coverTextOpacity,
+                                  duration: const Duration(milliseconds: 120),
+                                  child: _TimelineCoverLikeButton(
+                                    projectId: projectId,
+                                    likesCount: project.likesCount,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            Positioned(
                               left: 56,
                               right: 16,
                               top: MediaQuery.of(context).padding.top,
@@ -138,7 +164,7 @@ class _TimelinePageState extends State<TimelinePage> {
                                     opacity: toolbarTitleOpacity,
                                     duration: const Duration(milliseconds: 120),
                                     child: Text(
-                                      project!.title,
+                                      project.title,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: Theme.of(context)
@@ -168,24 +194,26 @@ class _TimelinePageState extends State<TimelinePage> {
                   ),
 
                   SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: () => context.push(
-                            '/my-projects/$projectId/timeline/new',
-                          ),
-                          style: FilledButton.styleFrom(
-                            backgroundColor:
-                                Theme.of(context).colorScheme.secondary,
-                            foregroundColor: Colors.white,
-                          ),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Nouveau Post'),
-                        ),
-                      ),
-                    ),
+                    child: isOwner
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: FilledButton.icon(
+                                onPressed: () => context.push(
+                                  '/my-projects/$projectId/timeline/new',
+                                ),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor:
+                                      Theme.of(context).colorScheme.secondary,
+                                  foregroundColor: Colors.white,
+                                ),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Nouveau Post'),
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   ),
 
                   if (items.isEmpty)
@@ -473,6 +501,96 @@ class _CoverText extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _TimelineCoverLikeButton extends StatefulWidget {
+  final String projectId;
+  final int likesCount;
+
+  const _TimelineCoverLikeButton({
+    required this.projectId,
+    required this.likesCount,
+  });
+
+  @override
+  State<_TimelineCoverLikeButton> createState() =>
+      _TimelineCoverLikeButtonState();
+}
+
+class _TimelineCoverLikeButtonState extends State<_TimelineCoverLikeButton> {
+  final ProjectRepository _repo = ProjectRepository();
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return const SizedBox.shrink();
+
+    return Material(
+      color: Colors.black.withOpacity(0.38),
+      borderRadius: BorderRadius.circular(999),
+      child: StreamBuilder<bool>(
+        stream: _repo.watchIsProjectLiked(
+          currentUid: uid,
+          projectId: widget.projectId,
+        ),
+        builder: (context, snap) {
+          final isLiked = snap.data ?? false;
+
+          return InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: _busy
+                ? null
+                : () async {
+                    setState(() => _busy = true);
+                    try {
+                      if (isLiked) {
+                        await _repo.unlikeProject(
+                          currentUid: uid,
+                          projectId: widget.projectId,
+                        );
+                      } else {
+                        await _repo.likeProject(
+                          currentUid: uid,
+                          projectId: widget.projectId,
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _busy = false);
+                    }
+                  },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _busy
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          isLiked ? Icons.favorite : Icons.favorite_border,
+                          size: 16,
+                          color: isLiked ? Colors.redAccent : Colors.white,
+                        ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${widget.likesCount}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
