@@ -1,9 +1,13 @@
+import 'dart:collection';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/project_model.dart';
 import '../repositories/project_repository.dart';
+import '../widgets/timeline_card.dart';
 
 class ProjectDetailPage extends StatelessWidget {
   final String projectId;
@@ -140,6 +144,11 @@ class ProjectDetailPage extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
+              const SizedBox(height: 16),
+              _ProjectMediaSection(
+                projectId: project.id,
+                coverUrl: project.coverUrl,
+              ),
               if (owner) ...[
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
@@ -166,6 +175,221 @@ class ProjectDetailPage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _ProjectMediaSection extends StatelessWidget {
+  final String projectId;
+  final String? coverUrl;
+
+  const _ProjectMediaSection({required this.projectId, required this.coverUrl});
+
+  Stream<List<String>> _watchAllPhotoUrls() {
+    return FirebaseFirestore.instance
+        .collection('projects')
+        .doc(projectId)
+        .collection('timeline')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) {
+          final urls = LinkedHashSet<String>();
+
+          final cover = (coverUrl ?? '').trim();
+          if (cover.isNotEmpty) {
+            urls.add(cover);
+          }
+
+          for (final doc in snap.docs) {
+            final data = doc.data();
+            final photoUrls = data['photoUrls'] as List<dynamic>? ?? const [];
+            for (final raw in photoUrls) {
+              final url = raw.toString().trim();
+              if (url.isNotEmpty) {
+                urls.add(url);
+              }
+            }
+          }
+
+          return urls.toList(growable: false);
+        });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = Theme.of(context).dividerColor.withOpacity(0.35);
+    final surface = Theme.of(context).colorScheme.surface.withOpacity(0.5);
+
+    return StreamBuilder<List<String>>(
+      stream: _watchAllPhotoUrls(),
+      builder: (context, snap) {
+        final urls = snap.data ?? const <String>[];
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.photo_library_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Medias du projet',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${urls.length}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (snap.connectionState == ConnectionState.waiting &&
+                  !snap.hasData)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (snap.hasError)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'Impossible de charger les medias.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                )
+              else if (urls.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'Aucune photo pour le moment.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                )
+              else
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final maxW = constraints.maxWidth;
+                    final crossAxisCount = maxW >= 760
+                        ? 5
+                        : (maxW >= 520 ? 4 : 3);
+
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: urls.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: 6,
+                        mainAxisSpacing: 6,
+                      ),
+                      itemBuilder: (context, i) {
+                        final url = urls[i];
+                        final isCover =
+                            i == 0 &&
+                            (coverUrl ?? '').trim().isNotEmpty &&
+                            url == coverUrl!.trim();
+
+                        return _ProjectMediaThumb(
+                          url: url,
+                          isCover: isCover,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    PhotoViewer(urls: urls, initialIndex: i),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProjectMediaThumb extends StatelessWidget {
+  final String url;
+  final bool isCover;
+  final VoidCallback onTap;
+
+  const _ProjectMediaThumb({
+    required this.url,
+    required this.isCover,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              url,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, progress) {
+                if (progress == null) return child;
+                return const ColoredBox(
+                  color: Colors.black12,
+                  child: Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (_, __, ___) => const ColoredBox(
+                color: Colors.black12,
+                child: Center(child: Icon(Icons.broken_image_outlined)),
+              ),
+            ),
+            if (isCover)
+              Positioned(
+                left: 6,
+                bottom: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.62),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: const Text(
+                    'Couverture',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
