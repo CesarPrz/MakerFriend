@@ -13,6 +13,11 @@ service cloud.firestore {
       return signedIn() && project.data.ownerUid == request.auth.uid;
     }
 
+    // Required for collectionGroup('likedProjects') queries used in the feed.
+    match /{path=**}/likedProjects/{projectId} {
+      allow read: if signedIn();
+    }
+
     // USERS
     match /users/{uid} {
       allow read: if signedIn();

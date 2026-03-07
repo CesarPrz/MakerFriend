@@ -40,6 +40,7 @@ class _MyProjectsPageState extends State<MyProjectsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Mes Projets')),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'my_projects_create_project_fab',
         onPressed: () => context.push('/my-projects/new'),
         icon: const Icon(Icons.add),
         label: const Text('Créer un projet'),

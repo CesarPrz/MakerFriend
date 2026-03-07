@@ -119,7 +119,7 @@ class _TimelinePageState extends State<TimelinePage> {
                             // Texte sur l'image (fade out)
                             Positioned(
                               left: 16,
-                              right: 16,
+                              right: 112,
                               bottom: 16,
                               child: IgnorePointer(
                                 ignoring: coverTextOpacity == 0,
@@ -479,8 +479,7 @@ class _CoverText extends StatelessWidget {
       children: [
         Text(
           title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+          softWrap: true,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 22,

@@ -54,6 +54,7 @@ class TimelineRepository {
   Stream<List<FollowingFeedItem>> watchFollowingFeed(
     String currentUid, {
     int projectsPerUserLimit = 10,
+    int likedProjectsPerFollowedUserLimit = 20,
     int perProjectTimelineLimit = 5,
     int totalLimit = 100,
   }) {
@@ -71,13 +72,20 @@ class TimelineRepository {
     late StreamSubscription<QuerySnapshot<Map<String, dynamic>>> followingSub;
     late StreamSubscription<QuerySnapshot<Map<String, dynamic>>> likedSub;
     final projectSubs = <String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>{};
+    final likedSubsByUid = <String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>{};
     final timelineSubs = <String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>{};
     final projectIdsByOwner = <String, List<String>>{};
+    final likedProjectIdsByFollowedUid = <String, Set<String>>{};
     final projectTitleById = <String, String>{};
     final projectCoverById = <String, String?>{};
     final likedProjectIds = <String>{};
     final timelineByProject = <String, List<FollowingFeedItem>>{};
     final controller = StreamController<List<FollowingFeedItem>>();
+    var closed = false;
+    Future<void> timelineRebuildQueue = Future.value();
+    Future<void> projectRebuildQueue = Future.value();
+    late void Function() scheduleTimelineRebuild;
+    late void Function(List<String>) scheduleProjectRebuild;
 
     void emit() {
       final merged = timelineByProject.values.expand((x) => x).toList()
@@ -96,13 +104,15 @@ class TimelineRepository {
       final allProjectIds = {
         ...projectIdsByOwner.values.expand((x) => x),
         ...likedProjectIds,
+        ...likedProjectIdsByFollowedUid.values.expand((x) => x),
       };
 
-      for (final sub in timelineSubs.values) {
-        await sub.cancel();
-      }
+      final previousTimelineSubs = timelineSubs.values.toList(growable: false);
       timelineSubs.clear();
       timelineByProject.clear();
+      for (final sub in previousTimelineSubs) {
+        await sub.cancel();
+      }
 
       if (allProjectIds.isEmpty) {
         emit();
@@ -147,15 +157,56 @@ class TimelineRepository {
       }
     }
 
-    Future<void> rebuildProjectSubs(List<String> followedUids) async {
-      for (final sub in projectSubs.values) {
+    Future<void> rebuildLikedSubs(List<String> followedUids) async {
+      final previousLikedSubs = likedSubsByUid.values.toList(growable: false);
+      likedSubsByUid.clear();
+      likedProjectIdsByFollowedUid.clear();
+      for (final sub in previousLikedSubs) {
         await sub.cancel();
       }
+
+      if (followedUids.isEmpty) return;
+
+      for (final uid in followedUids) {
+        final sub = _db
+            .collection('users')
+            .doc(uid)
+            .collection('likedProjects')
+            .orderBy('createdAt', descending: true)
+            .limit(likedProjectsPerFollowedUserLimit)
+            .snapshots()
+            .listen(
+              (snap) {
+                final ids = <String>{};
+                for (final d in snap.docs) {
+                  final data = d.data();
+                  final fromField = (data['projectId'] as String?)?.trim();
+                  final candidate = (fromField != null && fromField.isNotEmpty)
+                      ? fromField
+                      : d.id;
+                  if (candidate.isEmpty) continue;
+                  ids.add(candidate);
+                }
+                likedProjectIdsByFollowedUid[uid] = ids;
+                scheduleTimelineRebuild();
+              },
+              onError: controller.addError,
+            );
+        likedSubsByUid[uid] = sub;
+      }
+    }
+
+    Future<void> rebuildProjectSubs(List<String> followedUids) async {
+      final previousProjectSubs = projectSubs.values.toList(growable: false);
       projectSubs.clear();
       projectIdsByOwner.clear();
+      for (final sub in previousProjectSubs) {
+        await sub.cancel();
+      }
+      await rebuildLikedSubs(followedUids);
 
       if (followedUids.isEmpty) {
-        await rebuildTimelineSubsFromOwners();
+        scheduleTimelineRebuild();
         return;
       }
 
@@ -174,18 +225,46 @@ class TimelineRepository {
                   projectTitleById[d.id] = (data['title'] as String?) ?? 'Projet';
                   projectCoverById[d.id] = data['coverUrl'] as String?;
                 }
-                unawaited(rebuildTimelineSubsFromOwners());
+                scheduleTimelineRebuild();
               },
               onError: controller.addError,
             );
         projectSubs[uid] = sub;
       }
+
+      // Ensure liked projects from followed users can populate feed immediately.
+      scheduleTimelineRebuild();
     }
+
+    scheduleTimelineRebuild = () {
+      if (closed) return;
+      timelineRebuildQueue = timelineRebuildQueue
+          .then((_) async {
+            if (closed) return;
+            await rebuildTimelineSubsFromOwners();
+          })
+          .catchError((e, st) {
+            if (!closed) controller.addError(e, st);
+          });
+    };
+
+    scheduleProjectRebuild = (followedUids) {
+      if (closed) return;
+      final copy = followedUids.toList(growable: false);
+      projectRebuildQueue = projectRebuildQueue
+          .then((_) async {
+            if (closed) return;
+            await rebuildProjectSubs(copy);
+          })
+          .catchError((e, st) {
+            if (!closed) controller.addError(e, st);
+          });
+    };
 
     followingSub = followingRef.snapshots().listen(
       (followingSnap) {
         final followedUids = followingSnap.docs.map((d) => d.id).toList();
-        unawaited(rebuildProjectSubs(followedUids));
+        scheduleProjectRebuild(followedUids);
       },
       onError: controller.addError,
     );
@@ -195,18 +274,28 @@ class TimelineRepository {
         likedProjectIds
           ..clear()
           ..addAll(likedSnap.docs.map((d) => d.id));
-        unawaited(rebuildTimelineSubsFromOwners());
+        scheduleTimelineRebuild();
       },
       onError: controller.addError,
     );
 
     controller.onCancel = () async {
+      closed = true;
       await followingSub.cancel();
       await likedSub.cancel();
-      for (final sub in projectSubs.values) {
+      final remainingProjectSubs = projectSubs.values.toList(growable: false);
+      final remainingLikedSubs = likedSubsByUid.values.toList(growable: false);
+      final remainingTimelineSubs = timelineSubs.values.toList(growable: false);
+      projectSubs.clear();
+      likedSubsByUid.clear();
+      timelineSubs.clear();
+      for (final sub in remainingProjectSubs) {
         await sub.cancel();
       }
-      for (final sub in timelineSubs.values) {
+      for (final sub in remainingLikedSubs) {
+        await sub.cancel();
+      }
+      for (final sub in remainingTimelineSubs) {
         await sub.cancel();
       }
     };

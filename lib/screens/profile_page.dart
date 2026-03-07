@@ -21,6 +21,8 @@ class ProfilePage extends StatelessWidget {
     final me = FirebaseAuth.instance.currentUser;
     final profileUid = uid ?? me?.uid;
     final showBack = uid != null;
+    final fabHeroTag =
+        'profile_create_project_fab_${showBack ? 'pushed' : 'root'}_${profileUid ?? 'none'}';
 
     if (profileUid == null) {
       return const Scaffold(body: Center(child: Text("Tu n'es pas connecté.")));
@@ -111,6 +113,7 @@ class ProfilePage extends StatelessWidget {
       ),
       floatingActionButton: isMe
           ? FloatingActionButton.extended(
+              heroTag: fabHeroTag,
               onPressed: () => context.push('/my-projects/new'),
               icon: const Icon(Icons.add),
               label: const Text('Créer un projet'),
@@ -161,6 +164,14 @@ class _ProfileHeader extends StatelessWidget {
 
   Stream<int> _watchLikedProjectsCount() {
     return projectRepo.watchLikedProjectsCount(uid);
+  }
+
+  Stream<int> _watchProjectsCount() {
+    return FirebaseFirestore.instance
+        .collection('projects')
+        .where('ownerUid', isEqualTo: uid)
+        .snapshots()
+        .map((snap) => snap.size);
   }
 
   void _openLikedProjectsSheet(BuildContext context) {
@@ -359,8 +370,6 @@ class _ProfileHeader extends StatelessWidget {
             (data?['photoUrl'] as String?) ??
             FirebaseAuth.instance.currentUser?.photoURL;
 
-        final projectsCount = null;
-
         return Padding(
           padding: const EdgeInsets.fromLTRB(22, 12, 16, 8),
           child: Column(
@@ -468,11 +477,16 @@ class _ProfileHeader extends StatelessWidget {
                           Row(
                             children: [
                               Expanded(
-                                child: Center(
-                                  child: _StatTile(
-                                    label: 'Projets',
-                                    value: projectsCount,
-                                  ),
+                                child: StreamBuilder<int>(
+                                  stream: _watchProjectsCount(),
+                                  builder: (context, countSnap) {
+                                    return Center(
+                                      child: _StatTile(
+                                        label: 'Projets',
+                                        value: countSnap.data ?? 0,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                               Expanded(

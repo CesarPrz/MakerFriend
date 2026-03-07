@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -64,10 +66,309 @@ class _FeedView extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, i) {
               final g = state.groups[i];
-              return _FeedGroupCard(group: g);
+              return _FeedGroupListItem(
+                group: g,
+                currentUid: FirebaseAuth.instance.currentUser?.uid ?? '',
+              );
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _FeedGroupListItem extends StatelessWidget {
+  final FeedGroup group;
+  final String currentUid;
+
+  const _FeedGroupListItem({required this.group, required this.currentUid});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _FollowedLikesCard(
+          currentUid: currentUid,
+          projectId: group.projectId,
+          projectTitle: group.projectTitle,
+          projectCoverUrl: group.projectCoverUrl,
+        ),
+        _FeedGroupCard(group: group),
+      ],
+    );
+  }
+}
+
+class _FollowedLikesCard extends StatelessWidget {
+  final String currentUid;
+  final String projectId;
+  final String projectTitle;
+  final String? projectCoverUrl;
+
+  const _FollowedLikesCard({
+    required this.currentUid,
+    required this.projectId,
+    required this.projectTitle,
+    required this.projectCoverUrl,
+  });
+
+  Stream<_FollowedLikesPreview> _watchFollowedLikes() {
+    if (currentUid.isEmpty) {
+      return Stream.value(const _FollowedLikesPreview(totalCount: 0, users: []));
+    }
+
+    final controller = StreamController<_FollowedLikesPreview>();
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? followingSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? likesSub;
+    Set<String> followedUids = <String>{};
+
+    Future<void> emitPreview(
+      QuerySnapshot<Map<String, dynamic>> likesSnap,
+    ) async {
+      final likedByUid = <String, DateTime?>{};
+      for (final doc in likesSnap.docs) {
+        final likerUid = doc.reference.parent.parent?.id;
+        if (likerUid == null || !followedUids.contains(likerUid)) continue;
+
+        final data = doc.data();
+        final rawCreatedAt = data['createdAt'];
+        DateTime? likedAt;
+        if (rawCreatedAt is Timestamp) likedAt = rawCreatedAt.toDate();
+        if (rawCreatedAt is DateTime) likedAt = rawCreatedAt;
+
+        final previous = likedByUid[likerUid];
+        if (previous == null || (likedAt != null && likedAt.isAfter(previous))) {
+          likedByUid[likerUid] = likedAt;
+        }
+      }
+
+      if (likedByUid.isEmpty) {
+        controller.add(const _FollowedLikesPreview(totalCount: 0, users: []));
+        return;
+      }
+
+      final ordered = likedByUid.entries.toList()
+        ..sort((a, b) {
+          final ad = a.value;
+          final bd = b.value;
+          if (ad == null && bd == null) return 0;
+          if (ad == null) return 1;
+          if (bd == null) return -1;
+          return bd.compareTo(ad);
+        });
+
+      final previewUids = ordered.take(4).map((e) => e.key).toList(growable: false);
+      final userDocs = await Future.wait(
+        previewUids.map(
+          (uid) => FirebaseFirestore.instance.collection('users').doc(uid).get(),
+        ),
+      );
+
+      final users = <_FollowedLikeUser>[];
+      for (final doc in userDocs) {
+        final data = doc.data();
+        final name = (data?['displayName'] as String?)?.trim();
+        final photo = (data?['photoUrl'] as String?)?.trim();
+        users.add(
+          _FollowedLikeUser(
+            name: (name == null || name.isEmpty) ? 'Maker' : name,
+            photoUrl: (photo == null || photo.isEmpty) ? null : photo,
+          ),
+        );
+      }
+
+      controller.add(
+        _FollowedLikesPreview(totalCount: likedByUid.length, users: users),
+      );
+    }
+
+    followingSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUid)
+        .collection('following')
+        .snapshots()
+        .listen(
+          (followingSnap) async {
+            followedUids = followingSnap.docs.map((d) => d.id).toSet();
+
+            await likesSub?.cancel();
+            likesSub = null;
+
+            if (followedUids.isEmpty) {
+              controller.add(const _FollowedLikesPreview(totalCount: 0, users: []));
+              return;
+            }
+
+            likesSub = FirebaseFirestore.instance
+                .collectionGroup('likedProjects')
+                .where('projectId', isEqualTo: projectId)
+                .snapshots()
+                .listen(
+                  (likesSnap) => unawaited(emitPreview(likesSnap)),
+                  onError: controller.addError,
+                );
+          },
+          onError: controller.addError,
+        );
+
+    controller.onCancel = () async {
+      await followingSub?.cancel();
+      await likesSub?.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  String _line(_FollowedLikesPreview preview) {
+    if (preview.users.isEmpty || preview.totalCount == 0) return '';
+    final first = preview.users.first.name;
+    final others = preview.totalCount - 1;
+    if (others <= 0) return '$first a like le projet $projectTitle';
+    if (others == 1) return '$first et 1 autre ont like le projet $projectTitle';
+    return '$first et $others autres ont like le projet $projectTitle';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<_FollowedLikesPreview>(
+      stream: _watchFollowedLikes(),
+      builder: (context, snap) {
+        final preview = snap.data;
+        if (preview == null || preview.totalCount == 0) {
+          return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Card(
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () => context.push('/my-projects/$projectId/timeline'),
+              child: Stack(
+                children: [
+                  SizedBox(
+                    height: 74,
+                    width: double.infinity,
+                    child:
+                        (projectCoverUrl != null && projectCoverUrl!.isNotEmpty)
+                        ? Image.network(projectCoverUrl!, fit: BoxFit.cover)
+                        : Container(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                          ),
+                  ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.45),
+                            Colors.black.withOpacity(0.78),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                    child: Row(
+                      children: [
+                        _StackedFollowedLikeAvatars(users: preview.users),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _line(preview),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FollowedLikesPreview {
+  final int totalCount;
+  final List<_FollowedLikeUser> users;
+
+  const _FollowedLikesPreview({required this.totalCount, required this.users});
+}
+
+class _FollowedLikeUser {
+  final String name;
+  final String? photoUrl;
+
+  const _FollowedLikeUser({
+    required this.name,
+    this.photoUrl,
+  });
+}
+
+class _StackedFollowedLikeAvatars extends StatelessWidget {
+  final List<_FollowedLikeUser> users;
+
+  const _StackedFollowedLikeAvatars({required this.users});
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = users.take(4).toList(growable: false);
+    if (shown.isEmpty) return const SizedBox.shrink();
+
+    const avatarSize = 26.0;
+    const overlap = 16.0;
+    final width = avatarSize + (shown.length - 1) * overlap;
+
+    return SizedBox(
+      width: width,
+      height: avatarSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(
+              left: i * overlap,
+              child: Container(
+                width: avatarSize,
+                height: avatarSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.6),
+                ),
+                child: CircleAvatar(
+                  radius: avatarSize / 2,
+                  backgroundImage: shown[i].photoUrl != null
+                      ? NetworkImage(shown[i].photoUrl!)
+                      : null,
+                  child: shown[i].photoUrl == null
+                      ? Text(
+                          shown[i].name.isEmpty
+                              ? '?'
+                              : shown[i].name[0].toUpperCase(),
+                          style: const TextStyle(fontSize: 11),
+                        )
+                      : null,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -77,75 +378,6 @@ class _FeedGroupCard extends StatelessWidget {
   final FeedGroup group;
 
   const _FeedGroupCard({required this.group});
-  static final Map<String, Stream<_ProjectLikesPreview>> _likesStreamCache = {};
-
-  Stream<_ProjectLikesPreview> _likesStreamForProject(String projectId) {
-    return _likesStreamCache.putIfAbsent(
-      projectId,
-      () => _watchProjectLikesPreview(projectId),
-    );
-  }
-
-  Stream<_ProjectLikesPreview> _watchProjectLikesPreview(String projectId) {
-    return FirebaseFirestore.instance
-        .collectionGroup('likedProjects')
-        .where('projectId', isEqualTo: projectId)
-        .snapshots()
-        .asyncMap((snap) async {
-          final uniqueUids = <String>{};
-          for (final doc in snap.docs) {
-            final uid = doc.reference.parent.parent?.id;
-            if (uid != null && uid.isNotEmpty) {
-              uniqueUids.add(uid);
-            }
-          }
-
-          if (uniqueUids.isEmpty) {
-            return const _ProjectLikesPreview(totalCount: 0, users: []);
-          }
-
-          final previewUids = uniqueUids.take(4).toList(growable: false);
-          final userDocs = await Future.wait(
-            previewUids.map(
-              (uid) =>
-                  FirebaseFirestore.instance.collection('users').doc(uid).get(),
-            ),
-          );
-
-          final users = <_LikerUser>[];
-          for (final doc in userDocs) {
-            final data = doc.data();
-            final name = (data?['displayName'] as String?)?.trim();
-            final photo = (data?['photoUrl'] as String?)?.trim();
-            users.add(
-              _LikerUser(
-                name: (name == null || name.isEmpty) ? 'Maker' : name,
-                photoUrl: (photo == null || photo.isEmpty) ? null : photo,
-              ),
-            );
-          }
-
-          return _ProjectLikesPreview(
-            totalCount: uniqueUids.length,
-            users: users,
-          );
-        });
-  }
-
-  String _likesLine(_ProjectLikesPreview preview) {
-    if (preview.users.isEmpty || preview.totalCount == 0) {
-      return '';
-    }
-    final first = preview.users.first.name;
-    final others = preview.totalCount - 1;
-    if (others <= 0) {
-      return '$first a aime le projet';
-    }
-    if (others == 1) {
-      return '$first et 1 autre ont aime le projet';
-    }
-    return '$first et $others autres ont aime le projet';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -212,112 +444,64 @@ class _FeedGroupCard extends StatelessWidget {
                     ),
                     Padding(
                       padding: const EdgeInsets.all(10),
-                      child: StreamBuilder<_ProjectLikesPreview>(
-                        stream: _likesStreamForProject(group.projectId),
-                        builder: (context, likesSnap) {
-                          final likes = likesSnap.data;
-                          final hasLikes = (likes?.totalCount ?? 0) > 0;
-
-                          if (hasLikes && likes != null) {
-                            return Column(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            borderRadius: BorderRadius.circular(999),
+                            onTap: () => context.push('/u/${group.authorUid}'),
+                            child: CircleAvatar(
+                              radius: 18,
+                              backgroundImage:
+                                  (photoUrl != null && photoUrl.isNotEmpty)
+                                  ? NetworkImage(photoUrl)
+                                  : null,
+                              child: (photoUrl == null || photoUrl.isEmpty)
+                                  ? const Icon(Icons.person, size: 18)
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
+                                Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    _StackedLikeAvatars(users: likes.users),
-                                    const SizedBox(width: 10),
-                                    Expanded(
+                                    InkWell(
+                                      onTap: () =>
+                                          context.push('/u/${group.authorUid}'),
                                       child: Text(
-                                        _likesLine(likes),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
+                                        displayName,
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodyMedium
                                             ?.copyWith(
                                               color: Colors.white,
-                                              fontWeight: FontWeight.w600,
+                                              fontWeight: FontWeight.w700,
                                             ),
                                       ),
+                                    ),
+                                    Text(
+                                      ' a ajoute $updatesCount $label au projet',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(color: Colors.white),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   group.projectTitle,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.titleSmall
                                       ?.copyWith(color: Colors.white),
                                 ),
                               ],
-                            );
-                          }
-
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              InkWell(
-                                borderRadius: BorderRadius.circular(999),
-                                onTap: () => context.push('/u/${group.authorUid}'),
-                                child: CircleAvatar(
-                                  radius: 18,
-                                  backgroundImage:
-                                      (photoUrl != null && photoUrl.isNotEmpty)
-                                      ? NetworkImage(photoUrl)
-                                      : null,
-                                  child: (photoUrl == null || photoUrl.isEmpty)
-                                      ? const Icon(Icons.person, size: 18)
-                                      : null,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Wrap(
-                                      crossAxisAlignment:
-                                          WrapCrossAlignment.center,
-                                      children: [
-                                        InkWell(
-                                          onTap: () => context.push(
-                                            '/u/${group.authorUid}',
-                                          ),
-                                          child: Text(
-                                            displayName,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium
-                                                ?.copyWith(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                          ),
-                                        ),
-                                        Text(
-                                          ' a ajoute $updatesCount $label au projet',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodyMedium
-                                              ?.copyWith(color: Colors.white),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      group.projectTitle,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleSmall
-                                          ?.copyWith(color: Colors.white),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          );
-                        },
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -339,72 +523,6 @@ class _FeedGroupCard extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _ProjectLikesPreview {
-  final int totalCount;
-  final List<_LikerUser> users;
-
-  const _ProjectLikesPreview({required this.totalCount, required this.users});
-}
-
-class _LikerUser {
-  final String name;
-  final String? photoUrl;
-
-  const _LikerUser({required this.name, this.photoUrl});
-}
-
-class _StackedLikeAvatars extends StatelessWidget {
-  final List<_LikerUser> users;
-
-  const _StackedLikeAvatars({required this.users});
-
-  @override
-  Widget build(BuildContext context) {
-    final shown = users.take(4).toList(growable: false);
-    if (shown.isEmpty) return const SizedBox.shrink();
-
-    const avatarSize = 26.0;
-    const overlap = 16.0;
-    final width = avatarSize + (shown.length - 1) * overlap;
-
-    return SizedBox(
-      width: width,
-      height: avatarSize,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          for (var i = 0; i < shown.length; i++)
-            Positioned(
-              left: i * overlap,
-              child: Container(
-                width: avatarSize,
-                height: avatarSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 1.6),
-                ),
-                child: CircleAvatar(
-                  radius: avatarSize / 2,
-                  backgroundImage: shown[i].photoUrl != null
-                      ? NetworkImage(shown[i].photoUrl!)
-                      : null,
-                  child: shown[i].photoUrl == null
-                      ? Text(
-                          shown[i].name.isEmpty
-                              ? '?'
-                              : shown[i].name[0].toUpperCase(),
-                          style: const TextStyle(fontSize: 11),
-                        )
-                      : null,
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
