@@ -2,69 +2,46 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:maker_friend/features/discover/cubit/discover_cubit.dart';
 import 'package:maker_friend/widgets/notification_bell_button.dart';
 
 import '../models/project_model.dart';
 import '../repositories/project_repository.dart';
 
-class DiscoverPage extends StatefulWidget {
+class DiscoverPage extends StatelessWidget {
   const DiscoverPage({super.key});
-
-  @override
-  State<DiscoverPage> createState() => _DiscoverPageState();
-}
-
-class _DiscoverPageState extends State<DiscoverPage> {
-  final Set<String> _selectedTags = <String>{};
-
-  List<Project> _sortProjects(List<Project> projects) {
-    if (_selectedTags.isEmpty) return projects;
-
-    final selected = _selectedTags.map((e) => e.toLowerCase()).toSet();
-    final sorted = [...projects];
-    sorted.sort((a, b) {
-      int score(Project p) {
-        var s = 0;
-        for (final t in p.types) {
-          if (selected.contains(t.toLowerCase())) s++;
-        }
-        return s;
-      }
-
-      final scoreDiff = score(b) - score(a);
-      if (scoreDiff != 0) return scoreDiff;
-
-      final ad = a.lastTimelineUpdate;
-      final bd = b.lastTimelineUpdate;
-      if (ad == null && bd == null) return 0;
-      if (ad == null) return 1;
-      if (bd == null) return -1;
-      return bd.compareTo(ad);
-    });
-    return sorted;
-  }
 
   @override
   Widget build(BuildContext context) {
     final repo = context.read<ProjectRepository>();
+    return BlocProvider(
+      create: (_) => DiscoverCubit(
+        projectsStream: repo.watchDiscoverProjects(limit: 100),
+      ),
+      child: const _DiscoverView(),
+    );
+  }
+}
 
+class _DiscoverView extends StatelessWidget {
+  const _DiscoverView();
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Decouvrir'),
         actions: const [NotificationBellButton()],
       ),
-      body: StreamBuilder<List<Project>>(
-        stream: repo.watchDiscoverProjects(limit: 100),
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return Center(child: Text('Erreur: ${snap.error}'));
-          }
-          if (!snap.hasData) {
+      body: BlocBuilder<DiscoverCubit, DiscoverState>(
+        builder: (context, state) {
+          if (state.loading) {
             return const Center(child: CircularProgressIndicator());
           }
-
-          final projects = snap.data!;
-          if (projects.isEmpty) {
+          if (state.error != null) {
+            return Center(child: Text('Erreur: ${state.error}'));
+          }
+          if (state.projects.isEmpty) {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
@@ -76,20 +53,9 @@ class _DiscoverPageState extends State<DiscoverPage> {
             );
           }
 
-          final allTags =
-              projects
-                  .expand((p) => p.types)
-                  .map((t) => t.trim())
-                  .where((t) => t.isNotEmpty)
-                  .toSet()
-                  .toList()
-                ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-
-          final sortedProjects = _sortProjects(projects);
-
           return Column(
             children: [
-              if (allTags.isNotEmpty)
+              if (state.tags.isNotEmpty)
                 SizedBox(
                   height: 56,
                   child: ListView(
@@ -100,27 +66,19 @@ class _DiscoverPageState extends State<DiscoverPage> {
                         padding: const EdgeInsets.only(right: 8),
                         child: ChoiceChip(
                           label: const Text('Tous'),
-                          selected: _selectedTags.isEmpty,
-                          onSelected: (_) {
-                            setState(_selectedTags.clear);
-                          },
+                          selected: state.selectedTags.isEmpty,
+                          onSelected: (_) =>
+                              context.read<DiscoverCubit>().clearTags(),
                         ),
                       ),
-                      for (final tag in allTags)
+                      for (final tag in state.tags)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: FilterChip(
                             label: Text(tag),
-                            selected: _selectedTags.contains(tag),
-                            onSelected: (selected) {
-                              setState(() {
-                                if (selected) {
-                                  _selectedTags.add(tag);
-                                } else {
-                                  _selectedTags.remove(tag);
-                                }
-                              });
-                            },
+                            selected: state.selectedTags.contains(tag),
+                            onSelected: (_) =>
+                                context.read<DiscoverCubit>().toggleTag(tag),
                           ),
                         ),
                     ],
@@ -129,10 +87,10 @@ class _DiscoverPageState extends State<DiscoverPage> {
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                  itemCount: sortedProjects.length,
+                  itemCount: state.sortedProjects.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, i) {
-                    final project = sortedProjects[i];
+                    final project = state.sortedProjects[i];
                     return _DiscoverProjectCard(
                       project: project,
                       onTap: () =>

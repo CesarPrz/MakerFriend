@@ -26,3 +26,25 @@ firebase deploy --only firestore:rules,functions
 ## Getting Started
 
 This project is a starting point for a Flutter application.
+
+## Flavors
+
+Entrypoints disponibles:
+
+- `lib/main_dev.dart`
+- `lib/main_stage.dart`
+- `lib/main_prod.dart`
+
+Run:
+
+```bash
+flutter run -t lib/main_dev.dart
+flutter run -t lib/main_stage.dart
+flutter run -t lib/main_prod.dart
+```
+
+## Tests unitaires
+
+```bash
+flutter test
+```

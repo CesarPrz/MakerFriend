@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:maker_friend/features/profile/cubit/profile_projects_cubit.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/app_user_model.dart';
@@ -39,69 +40,73 @@ class ProfilePage extends StatelessWidget {
             )
           : null,
       body: SafeArea(
-        child: Column(
-          children: [
-            _ProfileHeader(
-              uid: profileUid,
-              currentUid: me?.uid,
-              isMe: isMe,
-              userRepo: userRepo,
-              projectRepo: projectRepo,
-              onEditProfile: isMe
-                  ? () => context.push('/settings/profile')
-                  : null,
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: StreamBuilder<List<Project>>(
-                stream: projectRepo.watchProjectsForOwner(profileUid),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (snap.hasError) {
-                    return Center(child: Text('Erreur: ${snap.error}'));
-                  }
-
-                  final projects = snap.data ?? [];
-
-                  if (projects.isEmpty) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          isMe
-                              ? "Aucun projet pour l’instant.\nAppuie sur “Créer un projet” pour commencer."
-                              : "Aucun projet pour l’instant.",
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    );
-                  }
-
-                  return GridView.builder(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 0.70,
-                        ),
-                    itemCount: projects.length,
-                    itemBuilder: (context, i) {
-                      final p = projects[i];
-                      return ProjectCard(
-                        project: p,
-                        onTap: () =>
-                            context.push('/my-projects/${p.id}/timeline'),
-                      );
-                    },
-                  );
-                },
+        child: BlocProvider(
+          create: (_) => ProfileProjectsCubit(
+            projectsStream: projectRepo.watchProjectsForOwner(profileUid),
+          ),
+          child: Column(
+            children: [
+              _ProfileHeader(
+                uid: profileUid,
+                currentUid: me?.uid,
+                isMe: isMe,
+                userRepo: userRepo,
+                projectRepo: projectRepo,
+                onEditProfile: isMe
+                    ? () => context.push('/settings/profile')
+                    : null,
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Expanded(
+                child: BlocBuilder<ProfileProjectsCubit, ProfileProjectsState>(
+                  builder: (context, state) {
+                    if (state.loading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (state.error != null) {
+                      return Center(child: Text('Erreur: ${state.error}'));
+                    }
+
+                    final projects = state.projects;
+
+                    if (projects.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            isMe
+                                ? "Aucun projet pour l’instant.\nAppuie sur “Créer un projet” pour commencer."
+                                : "Aucun projet pour l’instant.",
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }
+
+                    return GridView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                            childAspectRatio: 0.70,
+                          ),
+                      itemCount: projects.length,
+                      itemBuilder: (context, i) {
+                        final p = projects[i];
+                        return ProjectCard(
+                          project: p,
+                          onTap: () =>
+                              context.push('/my-projects/${p.id}/timeline'),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       floatingActionButton: isMe

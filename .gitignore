@@ -43,3 +43,22 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase local/emulator artifacts
+.firebase/
+firebase-debug*.log
+firestore-debug*.log
+database-debug*.log
+storage-debug*.log
+ui-debug*.log
+
+# Local env/secrets
+.env
+.env.*
+!.env.example
+android/key.properties
+*.jks
+*.keystore
+
+# Local accidental nested project/worktree
+/maker_friend/

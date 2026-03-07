@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:maker_friend/features/feed/cubit/feed_cubit.dart';
 import 'package:maker_friend/widgets/notification_bell_button.dart';
 
 import '../models/timeline_item_model.dart';
@@ -12,33 +13,6 @@ import '../widgets/timeline_card.dart';
 class FeedPage extends StatelessWidget {
   const FeedPage({super.key});
 
-  List<_FeedGroup> _groupFeed(List<FollowingFeedItem> feed) {
-    final groups = <_FeedGroup>[];
-    for (final entry in feed) {
-      if (groups.isNotEmpty) {
-        final last = groups.last;
-        if (last.projectId == entry.projectId &&
-            last.authorUid == entry.item.authorUid) {
-          last.items.add(entry);
-          continue;
-        }
-      }
-
-      groups.add(
-        _FeedGroup(
-          projectId: entry.projectId,
-          projectTitle: entry.projectTitle,
-          authorUid: entry.item.authorUid,
-          authorName: entry.item.authorName,
-          authorPhotoUrl: entry.item.authorPhotoUrl,
-          projectCoverUrl: entry.projectCoverUrl,
-          items: [entry],
-        ),
-      );
-    }
-    return groups;
-  }
-
   @override
   Widget build(BuildContext context) {
     final me = FirebaseAuth.instance.currentUser;
@@ -47,24 +21,32 @@ class FeedPage extends StatelessWidget {
     }
 
     final repo = context.read<TimelineRepository>();
+    return BlocProvider(
+      create: (_) => FeedCubit(feedStream: repo.watchFollowingFeed(me.uid)),
+      child: const _FeedView(),
+    );
+  }
+}
 
+class _FeedView extends StatelessWidget {
+  const _FeedView();
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mon fil'),
         actions: const [NotificationBellButton()],
       ),
-      body: StreamBuilder<List<FollowingFeedItem>>(
-        stream: repo.watchFollowingFeed(me.uid),
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return Center(child: Text('Erreur: ${snap.error}'));
-          }
-          if (!snap.hasData) {
+      body: BlocBuilder<FeedCubit, FeedState>(
+        builder: (context, state) {
+          if (state.loading) {
             return const Center(child: CircularProgressIndicator());
           }
-
-          final feed = snap.data!;
-          if (feed.isEmpty) {
+          if (state.error != null) {
+            return Center(child: Text('Erreur: ${state.error}'));
+          }
+          if (state.items.isEmpty) {
             return const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
@@ -76,14 +58,12 @@ class FeedPage extends StatelessWidget {
             );
           }
 
-          final groups = _groupFeed(feed);
-
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-            itemCount: groups.length,
+            itemCount: state.groups.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, i) {
-              final g = groups[i];
+              final g = state.groups[i];
               return _FeedGroupCard(group: g);
             },
           );
@@ -93,28 +73,8 @@ class FeedPage extends StatelessWidget {
   }
 }
 
-class _FeedGroup {
-  final String projectId;
-  final String projectTitle;
-  final String authorUid;
-  final String? authorName;
-  final String? authorPhotoUrl;
-  final String? projectCoverUrl;
-  final List<FollowingFeedItem> items;
-
-  _FeedGroup({
-    required this.projectId,
-    required this.projectTitle,
-    required this.authorUid,
-    required this.authorName,
-    required this.authorPhotoUrl,
-    required this.projectCoverUrl,
-    required this.items,
-  });
-}
-
 class _FeedGroupCard extends StatelessWidget {
-  final _FeedGroup group;
+  final FeedGroup group;
 
   const _FeedGroupCard({required this.group});
 

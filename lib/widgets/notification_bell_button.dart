@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:maker_friend/repositories/notification_repository.dart';
+import 'package:maker_friend/features/notifications/cubit/notifications_cubit.dart';
 
 class NotificationBellButton extends StatelessWidget {
   const NotificationBellButton({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final repo = NotificationRepository();
-    return StreamBuilder<int>(
-      stream: repo.watchUnreadCount(),
-      builder: (context, snap) {
-        final unread = snap.data ?? 0;
+    return BlocBuilder<NotificationsCubit, NotificationsState>(
+      builder: (context, state) {
+        final unread = state.unreadCount;
         return IconButton(
           tooltip: 'Notifications',
           onPressed: () => context.push('/settings/notifications'),

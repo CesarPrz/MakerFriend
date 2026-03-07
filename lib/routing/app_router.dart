@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:maker_friend/login_page.dart';
 import 'package:maker_friend/repositories/project_repository.dart';
-import 'package:maker_friend/repositories/timeline_repository.dart';
 import 'package:maker_friend/repositories/user_repository.dart';
 import 'package:maker_friend/screens/discover_page.dart';
 import 'package:maker_friend/screens/edit_profile_page.dart';
@@ -38,15 +37,7 @@ class AuthListenable extends ChangeNotifier {
 }
 
 class AppRouter {
-  final UserRepository userRepo;
-  final ProjectRepository projectRepo;
-  final TimelineRepository timelineRepo;
-
-  AppRouter({
-    required this.userRepo,
-    required this.projectRepo,
-    required this.timelineRepo,
-  });
+  AppRouter._();
   static final _auth = AuthListenable();
 
   static GoRouter router() {
