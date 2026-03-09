@@ -48,29 +48,10 @@ class _FeedView extends StatelessWidget {
           if (state.error != null) {
             return Center(child: Text('Erreur: ${state.error}'));
           }
-          if (state.items.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text(
-                  "Ton fil est vide.\nSuis des makers pour voir leurs updates.",
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }
 
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-            itemCount: state.groups.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (context, i) {
-              final g = state.groups[i];
-              return _FeedGroupListItem(
-                group: g,
-                currentUid: FirebaseAuth.instance.currentUser?.uid ?? '',
-              );
-            },
+          return _FeedContent(
+            groups: state.groups,
+            currentUid: FirebaseAuth.instance.currentUser?.uid ?? '',
           );
         },
       ),
@@ -78,110 +59,223 @@ class _FeedView extends StatelessWidget {
   }
 }
 
-class _FeedGroupListItem extends StatelessWidget {
-  final FeedGroup group;
+class _FeedContent extends StatefulWidget {
+  final List<FeedGroup> groups;
   final String currentUid;
 
-  const _FeedGroupListItem({required this.group, required this.currentUid});
+  const _FeedContent({required this.groups, required this.currentUid});
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _FollowedLikesCard(
-          currentUid: currentUid,
-          projectId: group.projectId,
-          projectTitle: group.projectTitle,
-          projectCoverUrl: group.projectCoverUrl,
-        ),
-        _FeedGroupCard(group: group),
-      ],
-    );
-  }
+  State<_FeedContent> createState() => _FeedContentState();
 }
 
-class _FollowedLikesCard extends StatelessWidget {
-  final String currentUid;
-  final String projectId;
-  final String projectTitle;
-  final String? projectCoverUrl;
+class _FeedContentState extends State<_FeedContent> {
+  late Stream<List<_FeedLikeActivity>> _likesStream;
 
-  const _FollowedLikesCard({
-    required this.currentUid,
-    required this.projectId,
-    required this.projectTitle,
-    required this.projectCoverUrl,
-  });
+  @override
+  void initState() {
+    super.initState();
+    _likesStream = _watchFollowedLikesActivities(widget.currentUid);
+  }
 
-  Stream<_FollowedLikesPreview> _watchFollowedLikes() {
-    if (currentUid.isEmpty) {
-      return Stream.value(const _FollowedLikesPreview(totalCount: 0, users: []));
+  @override
+  void didUpdateWidget(covariant _FeedContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentUid != widget.currentUid) {
+      _likesStream = _watchFollowedLikesActivities(widget.currentUid);
     }
+  }
 
-    final controller = StreamController<_FollowedLikesPreview>();
+  DateTime? _asDateTime(dynamic raw) {
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is DateTime) return raw;
+    return null;
+  }
+
+  DateTime? _groupDate(FeedGroup group) {
+    DateTime? latest;
+    for (final entry in group.items) {
+      final d = entry.item.createdAt;
+      if (d == null) continue;
+      if (latest == null || d.isAfter(latest)) latest = d;
+    }
+    return latest;
+  }
+
+  Stream<List<_FeedLikeActivity>> _watchFollowedLikesActivities(String currentUid) {
+    if (currentUid.isEmpty) return Stream.value(const []);
+
+    final controller = StreamController<List<_FeedLikeActivity>>();
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? followingSub;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? likesSub;
-    Set<String> followedUids = <String>{};
+    final likedSubsByUid =
+        <String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>{};
+    final likedByFollowedUid = <String, Map<String, DateTime?>>{};
+    final projectCache = <String, _ProjectLikeMeta>{};
+    final userCache = <String, _FollowedLikeUser>{};
+    var closed = false;
+    Future<void> emitQueue = Future.value();
 
-    Future<void> emitPreview(
-      QuerySnapshot<Map<String, dynamic>> likesSnap,
-    ) async {
-      final likedByUid = <String, DateTime?>{};
-      for (final doc in likesSnap.docs) {
-        final likerUid = doc.reference.parent.parent?.id;
-        if (likerUid == null || !followedUids.contains(likerUid)) continue;
-
-        final data = doc.data();
-        final rawCreatedAt = data['createdAt'];
-        DateTime? likedAt;
-        if (rawCreatedAt is Timestamp) likedAt = rawCreatedAt.toDate();
-        if (rawCreatedAt is DateTime) likedAt = rawCreatedAt;
-
-        final previous = likedByUid[likerUid];
-        if (previous == null || (likedAt != null && likedAt.isAfter(previous))) {
-          likedByUid[likerUid] = likedAt;
+    Future<void> emitActivities() async {
+      final byProject = <String, Map<String, DateTime?>>{};
+      for (final perUid in likedByFollowedUid.entries) {
+        final likerUid = perUid.key;
+        for (final perProject in perUid.value.entries) {
+          byProject.putIfAbsent(perProject.key, () => <String, DateTime?>{})[likerUid] =
+              perProject.value;
         }
       }
 
-      if (likedByUid.isEmpty) {
-        controller.add(const _FollowedLikesPreview(totalCount: 0, users: []));
+      if (byProject.isEmpty) {
+        controller.add(const []);
         return;
       }
 
-      final ordered = likedByUid.entries.toList()
-        ..sort((a, b) {
-          final ad = a.value;
-          final bd = b.value;
-          if (ad == null && bd == null) return 0;
-          if (ad == null) return 1;
-          if (bd == null) return -1;
-          return bd.compareTo(ad);
-        });
-
-      final previewUids = ordered.take(4).map((e) => e.key).toList(growable: false);
-      final userDocs = await Future.wait(
-        previewUids.map(
-          (uid) => FirebaseFirestore.instance.collection('users').doc(uid).get(),
-        ),
-      );
-
-      final users = <_FollowedLikeUser>[];
-      for (final doc in userDocs) {
-        final data = doc.data();
-        final name = (data?['displayName'] as String?)?.trim();
-        final photo = (data?['photoUrl'] as String?)?.trim();
-        users.add(
-          _FollowedLikeUser(
-            name: (name == null || name.isEmpty) ? 'Maker' : name,
-            photoUrl: (photo == null || photo.isEmpty) ? null : photo,
+      final missingProjectIds = byProject.keys
+          .where((id) => !projectCache.containsKey(id))
+          .toList(growable: false);
+      if (missingProjectIds.isNotEmpty) {
+        final docs = await Future.wait(
+          missingProjectIds.map(
+            (id) => FirebaseFirestore.instance.collection('projects').doc(id).get(),
           ),
         );
+        for (final doc in docs) {
+          final data = doc.data();
+          projectCache[doc.id] = _ProjectLikeMeta(
+            title: (data?['title'] as String?) ?? 'Projet',
+            coverUrl: data?['coverUrl'] as String?,
+          );
+        }
       }
 
-      controller.add(
-        _FollowedLikesPreview(totalCount: likedByUid.length, users: users),
-      );
+      final orderedLikersByProject = <String, List<MapEntry<String, DateTime?>>>{};
+      final neededUserIds = <String>{};
+      byProject.forEach((projectId, likerMap) {
+        final ordered = likerMap.entries.toList()
+          ..sort((a, b) {
+            final ad = a.value;
+            final bd = b.value;
+            if (ad == null && bd == null) return 0;
+            if (ad == null) return 1;
+            if (bd == null) return -1;
+            return bd.compareTo(ad);
+          });
+        orderedLikersByProject[projectId] = ordered;
+        neededUserIds.addAll(ordered.take(4).map((e) => e.key));
+      });
+
+      final missingUsers = neededUserIds
+          .where((uid) => !userCache.containsKey(uid))
+          .toList(growable: false);
+      if (missingUsers.isNotEmpty) {
+        final docs = await Future.wait(
+          missingUsers.map(
+            (uid) => FirebaseFirestore.instance.collection('users').doc(uid).get(),
+          ),
+        );
+        for (final doc in docs) {
+          final data = doc.data();
+          final name = (data?['displayName'] as String?)?.trim();
+          final photo = (data?['photoUrl'] as String?)?.trim();
+          userCache[doc.id] = _FollowedLikeUser(
+            name: (name == null || name.isEmpty) ? 'Maker' : name,
+            photoUrl: (photo == null || photo.isEmpty) ? null : photo,
+          );
+        }
+      }
+
+      final activities = <_FeedLikeActivity>[];
+      byProject.forEach((projectId, likerMap) {
+        final meta = projectCache[projectId];
+        final ordered = orderedLikersByProject[projectId] ?? const [];
+        final users = ordered
+            .take(4)
+            .map(
+              (e) => userCache[e.key] ?? const _FollowedLikeUser(name: 'Maker'),
+            )
+            .toList(growable: false);
+        final likedAt = ordered.isEmpty ? null : ordered.first.value;
+
+        activities.add(
+          _FeedLikeActivity(
+            projectId: projectId,
+            projectTitle: meta?.title ?? 'Projet',
+            projectCoverUrl: meta?.coverUrl,
+            likedAt: likedAt,
+            totalCount: likerMap.length,
+            users: users,
+          ),
+        );
+      });
+
+      activities.sort((a, b) {
+        final ad = a.likedAt;
+        final bd = b.likedAt;
+        if (ad == null && bd == null) return 0;
+        if (ad == null) return 1;
+        if (bd == null) return -1;
+        return bd.compareTo(ad);
+      });
+
+      controller.add(activities);
+    }
+
+    void scheduleEmit() {
+      if (closed) return;
+      emitQueue = emitQueue
+          .then((_) async {
+            if (closed) return;
+            await emitActivities();
+          })
+          .catchError((e, st) {
+            if (!closed) controller.addError(e, st);
+          });
+    }
+
+    Future<void> rebuildLikedSubs(List<String> followedUids) async {
+      final previous = likedSubsByUid.values.toList(growable: false);
+      likedSubsByUid.clear();
+      likedByFollowedUid.clear();
+      for (final sub in previous) {
+        await sub.cancel();
+      }
+
+      if (followedUids.isEmpty) {
+        scheduleEmit();
+        return;
+      }
+
+      for (final uid in followedUids) {
+        likedSubsByUid[uid] = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('likedProjects')
+            .orderBy('createdAt', descending: true)
+            .limit(20)
+            .snapshots()
+            .listen(
+              (snap) {
+                final byProject = <String, DateTime?>{};
+                for (final doc in snap.docs) {
+                  final data = doc.data();
+                  final fromField = (data['projectId'] as String?)?.trim();
+                  final projectId =
+                      (fromField != null && fromField.isNotEmpty) ? fromField : doc.id;
+                  if (projectId.isEmpty) continue;
+
+                  final likedAt = _asDateTime(data['createdAt']);
+                  final previousAt = byProject[projectId];
+                  if (previousAt == null ||
+                      (likedAt != null && likedAt.isAfter(previousAt))) {
+                    byProject[projectId] = likedAt;
+                  }
+                }
+                likedByFollowedUid[uid] = byProject;
+                scheduleEmit();
+              },
+              onError: controller.addError,
+            );
+      }
     }
 
     followingSub = FirebaseFirestore.instance
@@ -190,126 +284,208 @@ class _FollowedLikesCard extends StatelessWidget {
         .collection('following')
         .snapshots()
         .listen(
-          (followingSnap) async {
-            followedUids = followingSnap.docs.map((d) => d.id).toSet();
-
-            await likesSub?.cancel();
-            likesSub = null;
-
-            if (followedUids.isEmpty) {
-              controller.add(const _FollowedLikesPreview(totalCount: 0, users: []));
-              return;
-            }
-
-            likesSub = FirebaseFirestore.instance
-                .collectionGroup('likedProjects')
-                .where('projectId', isEqualTo: projectId)
-                .snapshots()
-                .listen(
-                  (likesSnap) => unawaited(emitPreview(likesSnap)),
-                  onError: controller.addError,
-                );
+          (followingSnap) {
+            final followedUids = followingSnap.docs.map((d) => d.id).toList();
+            unawaited(rebuildLikedSubs(followedUids));
           },
           onError: controller.addError,
         );
 
     controller.onCancel = () async {
+      closed = true;
       await followingSub?.cancel();
-      await likesSub?.cancel();
+      final remaining = likedSubsByUid.values.toList(growable: false);
+      likedSubsByUid.clear();
+      for (final sub in remaining) {
+        await sub.cancel();
+      }
     };
 
     return controller.stream;
   }
 
-  String _line(_FollowedLikesPreview preview) {
-    if (preview.users.isEmpty || preview.totalCount == 0) return '';
-    final first = preview.users.first.name;
-    final others = preview.totalCount - 1;
-    if (others <= 0) return '$first a like le projet $projectTitle';
-    if (others == 1) return '$first et 1 autre ont like le projet $projectTitle';
-    return '$first et $others autres ont like le projet $projectTitle';
-  }
-
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<_FollowedLikesPreview>(
-      stream: _watchFollowedLikes(),
-      builder: (context, snap) {
-        final preview = snap.data;
-        if (preview == null || preview.totalCount == 0) {
-          return const SizedBox.shrink();
-        }
+    return StreamBuilder<List<_FeedLikeActivity>>(
+      stream: _likesStream,
+      builder: (context, likesSnap) {
+        final likes = likesSnap.data ?? const <_FeedLikeActivity>[];
+        var order = 0;
+        final entries = <_FeedRenderEntry>[
+          for (final g in widget.groups)
+            _FeedRenderEntry.group(
+              group: g,
+              sortAt: _groupDate(g),
+              originalOrder: order++,
+            ),
+          for (final l in likes)
+            _FeedRenderEntry.like(
+              like: l,
+              sortAt: l.likedAt,
+              originalOrder: order++,
+            ),
+        ]..sort((a, b) {
+            final ad = a.sortAt;
+            final bd = b.sortAt;
+            if (ad == null && bd == null) {
+              return a.originalOrder.compareTo(b.originalOrder);
+            }
+            if (ad == null) return 1;
+            if (bd == null) return -1;
+            final byDate = bd.compareTo(ad);
+            if (byDate != 0) return byDate;
+            return a.originalOrder.compareTo(b.originalOrder);
+          });
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Card(
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () => context.push('/my-projects/$projectId/timeline'),
-              child: Stack(
-                children: [
-                  SizedBox(
-                    height: 74,
-                    width: double.infinity,
-                    child:
-                        (projectCoverUrl != null && projectCoverUrl!.isNotEmpty)
-                        ? Image.network(projectCoverUrl!, fit: BoxFit.cover)
-                        : Container(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest,
-                          ),
-                  ),
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.black.withOpacity(0.45),
-                            Colors.black.withOpacity(0.78),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-                    child: Row(
-                      children: [
-                        _StackedFollowedLikeAvatars(users: preview.users),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _line(preview),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+        if (entries.isEmpty) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                "Ton fil est vide.\nSuis des makers pour voir leurs updates.",
+                textAlign: TextAlign.center,
               ),
             ),
-          ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          itemCount: entries.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, i) {
+            final entry = entries[i];
+            if (entry.like != null) {
+              return _FollowedLikesActivityCard(like: entry.like!);
+            }
+            return _FeedGroupCard(group: entry.group!);
+          },
         );
       },
     );
   }
 }
 
-class _FollowedLikesPreview {
+class _FeedRenderEntry {
+  final FeedGroup? group;
+  final _FeedLikeActivity? like;
+  final DateTime? sortAt;
+  final int originalOrder;
+
+  const _FeedRenderEntry.group({
+    required FeedGroup group,
+    required this.sortAt,
+    required this.originalOrder,
+  })
+      : group = group,
+        like = null;
+
+  const _FeedRenderEntry.like({
+    required _FeedLikeActivity like,
+    required this.sortAt,
+    required this.originalOrder,
+  })
+      : like = like,
+        group = null;
+}
+
+class _FeedLikeActivity {
+  final String projectId;
+  final String projectTitle;
+  final String? projectCoverUrl;
+  final DateTime? likedAt;
   final int totalCount;
   final List<_FollowedLikeUser> users;
 
-  const _FollowedLikesPreview({required this.totalCount, required this.users});
+  const _FeedLikeActivity({
+    required this.projectId,
+    required this.projectTitle,
+    required this.projectCoverUrl,
+    required this.likedAt,
+    required this.totalCount,
+    required this.users,
+  });
+}
+
+class _ProjectLikeMeta {
+  final String title;
+  final String? coverUrl;
+
+  const _ProjectLikeMeta({required this.title, required this.coverUrl});
+}
+
+class _FollowedLikesActivityCard extends StatelessWidget {
+  final _FeedLikeActivity like;
+
+  const _FollowedLikesActivityCard({required this.like});
+
+  String _line() {
+    if (like.users.isEmpty || like.totalCount == 0) return '';
+    final first = like.users.first.name;
+    final others = like.totalCount - 1;
+    if (others <= 0) return '$first a like le projet ${like.projectTitle}';
+    if (others == 1) {
+      return '$first et 1 autre ont like le projet ${like.projectTitle}';
+    }
+    return '$first et $others autres ont like le projet ${like.projectTitle}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.push('/my-projects/${like.projectId}/timeline'),
+        child: Stack(
+          children: [
+            SizedBox(
+              height: 74,
+              width: double.infinity,
+              child: (like.projectCoverUrl != null && like.projectCoverUrl!.isNotEmpty)
+                  ? Image.network(like.projectCoverUrl!, fit: BoxFit.cover)
+                  : Container(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    ),
+            ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.45),
+                      Colors.black.withOpacity(0.78),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+              child: Row(
+                children: [
+                  _StackedFollowedLikeAvatars(users: like.users),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _line(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _FollowedLikeUser {

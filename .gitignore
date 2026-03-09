@@ -52,6 +52,10 @@ database-debug*.log
 storage-debug*.log
 ui-debug*.log
 
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+
 # Local env/secrets
 .env
 .env.*

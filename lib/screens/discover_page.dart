@@ -53,37 +53,77 @@ class _DiscoverView extends StatelessWidget {
             );
           }
 
+          final selectedTagValue = state.selectedTags.isEmpty
+              ? null
+              : state.selectedTags.first;
+          final safeSelectedTag = (selectedTagValue != null &&
+                  state.tags.contains(selectedTagValue))
+              ? selectedTagValue
+              : null;
+
           return Column(
             children: [
-              if (state.tags.isNotEmpty)
-                SizedBox(
-                  height: 56,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: const Text('Tous'),
-                          selected: state.selectedTags.isEmpty,
-                          onSelected: (_) =>
-                              context.read<DiscoverCubit>().clearTags(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<DiscoverSortMode>(
+                        value: state.sortMode,
+                        decoration: const InputDecoration(
+                          labelText: 'Tri',
+                          isDense: true,
+                          border: OutlineInputBorder(),
                         ),
-                      ),
-                      for (final tag in state.tags)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(tag),
-                            selected: state.selectedTags.contains(tag),
-                            onSelected: (_) =>
-                                context.read<DiscoverCubit>().toggleTag(tag),
+                        items: const [
+                          DropdownMenuItem(
+                            value: DiscoverSortMode.newest,
+                            child: Text('Nouveau'),
                           ),
+                          DropdownMenuItem(
+                            value: DiscoverSortMode.popular,
+                            child: Text('Populaire'),
+                          ),
+                        ],
+                        onChanged: (mode) {
+                          if (mode == null) return;
+                          context.read<DiscoverCubit>().setSortMode(mode);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<String?>(
+                        value: safeSelectedTag,
+                        decoration: const InputDecoration(
+                          labelText: 'Tags',
+                          isDense: true,
+                          border: OutlineInputBorder(),
                         ),
-                    ],
-                  ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Tous les tags'),
+                          ),
+                          ...state.tags.map(
+                            (tag) => DropdownMenuItem<String?>(
+                              value: tag,
+                              child: Text(tag),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) {
+                            context.read<DiscoverCubit>().clearTags();
+                            return;
+                          }
+                          context.read<DiscoverCubit>().setSingleTag(value);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
+              ),
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
