@@ -1,50 +1,49 @@
-# maker_friend
+# MakerFriend
 
-A new Flutter project.
+MakerFriend est une application mobile sociale pour makers, centree sur le partage de projets, les timelines d'avancement et les interactions de communaute.
 
-## Following / Followers (Firestore + Cloud Functions)
+## Concept
 
-Cette app utilise maintenant ce modèle:
+L'objectif est de rendre les projets personnels plus visibles et plus vivants:
 
-- Le client écrit uniquement `users/{me}/following/{targetUid}`.
-- Une Cloud Function synchronise automatiquement:
-  - `users/{targetUid}/followers/{me}`
-  - `users/{me}.followingCount`
-  - `users/{targetUid}.followersCount`
+- publier des projets avec couverture, tags et description
+- poster des updates (posts et etapes) dans une timeline projet
+- suivre d'autres makers et voir leurs activites dans un fil dedie
+- liker, commenter et recevoir des notifications en temps reel
 
-### Déployer
+## Fonctionnalites principales
 
-```bash
-firebase deploy --only firestore:rules,functions
-```
+- Decouverte de projets avec tri (`Nouveau` / `Populaire`) et filtrage par tags
+- Feed "Mon fil" combinant updates de projets et activite des profils suivis
+- Profils utilisateurs avec compteurs (projets, suivis, followers, likes)
+- Like projet + commentaires sur posts
+- Notifications pour follows, likes et commentaires
+- Creation, edition et suppression de contenu (projets et posts)
 
-### Structure attendue
+## Stack technique
 
-- `functions/index.js`: triggers `onFollowingCreated` et `onFollowingDeleted`
-- `firestore.rules`: droits sur `users/*/following/*` et lecture seule sur `users/*/followers/*`
+- Frontend: Flutter (Dart)
+- State management: BLoC / Cubit
+- Backend: Firebase
+- Base de donnees: Cloud Firestore
+- Auth: Firebase Auth
+- Fonctions serveur: Cloud Functions for Firebase (TypeScript)
+- Notifications push: Firebase Cloud Messaging
+- Storage: Firebase Storage
 
-## Getting Started
+## Architecture (haut niveau)
 
-This project is a starting point for a Flutter application.
+- `lib/screens`: UI pages (discover, feed, profile, timeline, etc.)
+- `lib/repositories`: acces aux donnees Firestore/Firebase
+- `lib/features/*/cubit`: logique d'etat par feature
+- `lib/widgets`: composants UI reutilisables
+- `functions/src`: logique backend declenchee par evenements Firestore
+- `firestore.rules`: regles de securite de la base
 
-## Flavors
+## Etat du projet
 
-Entrypoints disponibles:
+Le projet est en developpement actif avec une base fonctionnelle complete (social + timeline + notifications), et une structure orientee evolution.
 
-- `lib/main_dev.dart`
-- `lib/main_stage.dart`
-- `lib/main_prod.dart`
+## Licence
 
-Run:
-
-```bash
-flutter run -t lib/main_dev.dart
-flutter run -t lib/main_stage.dart
-flutter run -t lib/main_prod.dart
-```
-
-## Tests unitaires
-
-```bash
-flutter test
-```
+MIT - voir `LICENSE`.
