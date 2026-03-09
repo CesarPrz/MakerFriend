@@ -55,6 +55,9 @@ ui-debug*.log
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 lib/firebase_options.dart
+lib/firebase_options_dev.dart
+lib/firebase_options_stage.dart
+lib/firebase_options_prod.dart
 
 # Local env/secrets
 .env
