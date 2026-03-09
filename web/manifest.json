@@ -1,11 +1,11 @@
 {
-    "name": "maker_friend",
-    "short_name": "maker_friend",
+    "name": "MakerFlow",
+    "short_name": "MakerFlow",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#111111",
+    "theme_color": "#111111",
+    "description": "MakerFlow app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

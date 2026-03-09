@@ -9,5 +9,5 @@ Future<void> bootstrap(FlavorConfig flavor) async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await PushNotificationService().init();
-  runApp(MakerFriendApp(flavor: flavor));
+  runApp(MakerFlowApp(flavor: flavor));
 }

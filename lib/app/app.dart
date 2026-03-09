@@ -7,10 +7,10 @@ import 'package:maker_friend/routing/app_router.dart';
 import 'package:maker_friend/themes/app_theme.dart';
 import 'package:maker_friend/themes/theme_controller.dart';
 
-class MakerFriendApp extends StatelessWidget {
+class MakerFlowApp extends StatelessWidget {
   final FlavorConfig flavor;
 
-  const MakerFriendApp({super.key, required this.flavor});
+  const MakerFlowApp({super.key, required this.flavor});
 
   @override
   Widget build(BuildContext context) {

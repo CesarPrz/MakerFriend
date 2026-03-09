@@ -13,19 +13,19 @@ class FlavorConfig {
 
   static const FlavorConfig dev = FlavorConfig(
     flavor: Flavor.dev,
-    appName: 'MakerFriend Dev',
+    appName: 'MakerFlow Dev',
     enableCrashlytics: false,
   );
 
   static const FlavorConfig stage = FlavorConfig(
     flavor: Flavor.stage,
-    appName: 'MakerFriend Stage',
+    appName: 'MakerFlow Stage',
     enableCrashlytics: true,
   );
 
   static const FlavorConfig prod = FlavorConfig(
     flavor: Flavor.prod,
-    appName: 'MakerFriend',
+    appName: 'MakerFlow',
     enableCrashlytics: true,
   );
 }

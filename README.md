@@ -1,6 +1,6 @@
-# MakerFriend
+# MakerFlow
 
-MakerFriend est une application mobile sociale pour makers, centree sur le partage de projets, les timelines d'avancement et les interactions de communaute.
+MakerFlow est une application mobile sociale pour makers, centree sur le partage de projets, les timelines d'avancement et les interactions de communaute.
 
 ## Concept
 

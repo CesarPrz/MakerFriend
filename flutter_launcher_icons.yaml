@@ -1,0 +1,32 @@
+# Run with:
+# dart run flutter_launcher_icons -f flutter_launcher_icons.yaml
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  web:
+    generate: true
+    image_path: "assets/web/icon-512.png"
+    background_color: "#111111"
+    theme_color: "#111111"
+  windows:
+    generate: true
+    image_path: "assets/web/icon-512.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/ios/AppIcon~ios-marketing.png"
+
+  # Main source icon
+  image_path: "assets/ios/AppIcon~ios-marketing.png"
+  image_path_android: "assets/android/play_store_512.png"
+  image_path_ios: "assets/ios/AppIcon~ios-marketing.png"
+
+  # Android adaptive icon assets
+  adaptive_icon_foreground: "assets/android/res/mipmap-xxxhdpi/ic_launcher_foreground.png"
+  adaptive_icon_background: "assets/android/res/mipmap-xxxhdpi/ic_launcher_background.png"
+  adaptive_icon_monochrome: "assets/android/res/mipmap-xxxhdpi/ic_launcher_monochrome.png"
+  min_sdk_android: 21
+
+  # iOS requires non-alpha app icons
+  remove_alpha_ios: true
