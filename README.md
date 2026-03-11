@@ -44,6 +44,33 @@ L'objectif est de rendre les projets personnels plus visibles et plus vivants:
 
 Le projet est en developpement actif avec une base fonctionnelle complete (social + timeline + notifications), et une structure orientee evolution.
 
+## Seeder dev (screenshots)
+
+Un script de seed Firestore est disponible pour peupler des donnees maker realistes (users, projets, timeline, commentaires, likes, follows, notifications).
+
+Depuis `functions/`:
+
+```bash
+npm run seed:dev -- --viewerUid <TON_UID_FIREBASE_AUTH>
+```
+
+Si tu n'as pas ADC configure, passe directement une cle service account:
+
+```bash
+npm run seed:dev -- --viewerUid <TON_UID_FIREBASE_AUTH> --serviceAccount "C:\\Users\\Cesar\\.secrets\\makerfriend-dev-seed.json"
+```
+
+Version reset (supprime puis recree les docs seedes):
+
+```bash
+npm run seed:dev:reset -- --viewerUid <TON_UID_FIREBASE_AUTH>
+```
+
+Notes:
+- par defaut, le script cible le projet `dev` de `.firebaserc`
+- il bloque `stage/prod` sauf si `--allow-non-dev` est fourni explicitement
+- il faut des credentials ADC valides (`GOOGLE_APPLICATION_CREDENTIALS` ou `gcloud auth application-default login`)
+
 ## Licence
 
 MIT - voir `LICENSE`.

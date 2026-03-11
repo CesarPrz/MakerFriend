@@ -41,10 +41,17 @@ class Project {
 
   /// Firestore -> Project (sans owner)
   factory Project.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data()!;
-    final ownerUid = data['ownerUid'] as String;
-    final ownerDisplayName = data['ownerDisplayName'] as String?;
-    final ownerPhotoUrl = data['ownerPhotoUrl'] as String?;
+    final data = doc.data() ?? <String, dynamic>{};
+    final ownerUid = _asNullableString(data['ownerUid']) ?? '';
+    final ownerDisplayName = _asNullableString(data['ownerDisplayName']);
+    final ownerPhotoUrl = _asNullableString(data['ownerPhotoUrl']);
+    final title = _asNullableString(data['title']) ?? 'Projet sans titre';
+    final followersCount = _asInt(data['followersCount']) ?? 0;
+    final likesCount = _asInt(data['likesCount']);
+    final parsedTypes = ((data['types'] as List?) ?? const [])
+        .map((e) => e?.toString().trim() ?? '')
+        .where((e) => e.isNotEmpty)
+        .toList();
 
     return Project(
       id: doc.id,
@@ -56,22 +63,17 @@ class Project {
               photoUrl: ownerPhotoUrl,
             )
           : null,
-      title: data['title'] as String,
-      description: data['description'] as String?,
-      coverUrl: data['coverUrl'] as String?,
+      title: title,
+      description: _asNullableString(data['description']),
+      coverUrl: _asNullableString(data['coverUrl']),
       ownerDisplayName: ownerDisplayName,
       ownerPhotoUrl: ownerPhotoUrl,
       createdAt: _tsToDt(data['createdAt']),
       updatedAt: _tsToDt(data['updatedAt']),
       lastTimelineUpdate: _tsToDt(data['lastTimelineUpdate']),
-      followersCount: (data['followersCount'] as int?) ?? 0,
-      likesCount:
-          (data['likesCount'] as int?) ??
-          (data['followersCount'] as int?) ??
-          0,
-      types: ((data['types'] as List?) ?? const [])
-          .whereType<String>()
-          .toList(),
+      followersCount: followersCount,
+      likesCount: likesCount ?? followersCount,
+      types: parsedTypes,
     );
   }
 
@@ -119,5 +121,18 @@ class Project {
     if (v is Timestamp) return v.toDate();
     if (v is DateTime) return v;
     return null;
+  }
+
+  static String? _asNullableString(dynamic value) {
+    if (value == null) return null;
+    final parsed = value.toString().trim();
+    return parsed.isEmpty ? null : parsed;
+  }
+
+  static int? _asInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString());
   }
 }

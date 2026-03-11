@@ -23,6 +23,7 @@ class MakerFlowApp extends StatelessWidget {
           child: MultiBlocProvider(
             providers: buildBlocProviders(),
             child: MaterialApp.router(
+              debugShowCheckedModeBanner: false,
               title: flavor.appName,
               theme: AppTheme.light(),
               darkTheme: AppTheme.dark(),

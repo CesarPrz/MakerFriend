@@ -35,7 +35,7 @@ class UserRepository {
       if (!doc.exists) return null;
       final data = doc.data();
       if (data == null) return null;
-      return AppUser.fromJson(data);
+      return AppUser.fromJson(data, fallbackUid: doc.id);
     });
   }
 
@@ -72,7 +72,7 @@ class UserRepository {
     if (!doc.exists) return null;
     final data = doc.data();
     if (data == null) return null;
-    return AppUser.fromJson(data);
+    return AppUser.fromJson(data, fallbackUid: doc.id);
   }
 
   /// Crée / MAJ le profil Firestore à partir du user FirebaseAuth

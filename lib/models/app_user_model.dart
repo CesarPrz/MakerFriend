@@ -20,12 +20,20 @@ class AppUser extends Equatable {
     this.providerIds = const [],
   });
 
-  factory AppUser.fromJson(Map<String, dynamic> json) {
+  factory AppUser.fromJson(
+    Map<String, dynamic> json, {
+    String? fallbackUid,
+  }) {
+    final rawUid = json['uid'];
+    final parsedUid = (rawUid is String && rawUid.trim().isNotEmpty)
+        ? rawUid
+        : (fallbackUid ?? '');
+
     return AppUser(
-      uid: json['uid'] as String,
-      displayName: json['displayName'] as String?,
-      email: json['email'] as String?,
-      photoUrl: json['photoUrl'] as String?,
+      uid: parsedUid,
+      displayName: _asNullableString(json['displayName']),
+      email: _asNullableString(json['email']),
+      photoUrl: _asNullableString(json['photoUrl']),
       createdAt: _timestampToDateTime(json['createdAt']),
       lastLoginAt: _timestampToDateTime(json['lastLoginAt']),
       providerIds:
@@ -37,8 +45,8 @@ class AppUser extends Equatable {
   }
 
   factory AppUser.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    return AppUser.fromJson(data);
+    final data = (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+    return AppUser.fromJson(data, fallbackUid: doc.id);
   }
 
   Map<String, dynamic> toJson() {
@@ -77,6 +85,12 @@ class AppUser extends Equatable {
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
     return null;
+  }
+
+  static String? _asNullableString(dynamic value) {
+    if (value == null) return null;
+    final parsed = value.toString().trim();
+    return parsed.isEmpty ? null : parsed;
   }
 
   @override
